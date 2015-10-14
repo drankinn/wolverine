@@ -100,18 +100,24 @@ class MicroConsul(MicroRegistry):
         if self.is_connected:
             for key, bind in self.binds.items():
                 if bind.state in [0, -1]:
+                    print('binding ', bind.name)
                     self._loop.create_task(bind.run())
 
     def run(self):
+        print('')
+        print('-'*20)
+        print('Consul - Initializing discovery listeners')
+
         def node_change(data):
-            # print("node:", data)
+            print("node:", data)
             pass
 
-        self.bind_listener('node', 'default', node_change)
+        self.bind_listener('node', 'node', node_change)
         self._loop.create_task(self.run_forever())
 
     def bind_listener(self, bind_type, name, func, **kwargs):
         bind = None
+        single = kwargs.pop('singleton', False)
         if bind_type == 'kv':
             bind = ConsulKVBind(self, name, func, **kwargs)
         if bind_type == 'service':
@@ -122,11 +128,17 @@ class MicroConsul(MicroRegistry):
             bind = ConsulNodeBind(self, name, func, **kwargs)
         if isinstance(bind, ConsulBind):
             if bind.key in self.binds.keys():
-                print("warning: bind key already registered", bind.key)
-                bind = self.binds[bind.key]
-                bind.callbacks.append(func)
-                if 'data' in kwargs:
-                    bind.data.append(kwargs['data'])
+                if not single:
+                    bind = self.binds[bind.key]
+                    bind.callbacks.append(func)
+                    print("binding count for ", bind.key, ':',
+                          len(bind.callbacks))
+                    if 'data' in kwargs:
+                        bind.data.append(kwargs['data'])
+                else:
+                    print('discovery warning:',
+                          'not binding additional callbacks for singleton:',
+                          name)
             else:
                 self.binds[bind.key] = bind
         else:

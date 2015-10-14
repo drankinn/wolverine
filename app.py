@@ -13,7 +13,7 @@ def main():
                       help="simulated workload delay", default="1")
     parser.add_option("-t", "--times", dest="times",
                       help="number of times to ping", default="-1")
-    parser.add_option("-r", "--route", dest="route", action='store_true',
+    parser.add_option("-r", "--routing", dest="routing", action='store_true',
                       help="enable advanced routing")
     parser.add_option("-a", "--async", dest="async", action='store_true',
                       help="enable async client")
@@ -21,15 +21,9 @@ def main():
     if len(args) != 1:
         parser.error("incorrect number of arguments")
     if 'ping' in args:
-        if options.route:
-            ping_pong('client-router', options)
-        else:
-            ping_pong('client', options)
+        ping_pong('client', options)
     if 'pong' in args:
-        if options.route:
-            ping_pong('server-router', options)
-        else:
-            ping_pong('server', options)
+        ping_pong('server', options)
 
 
 if __name__ == "__main__":

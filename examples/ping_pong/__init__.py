@@ -1,4 +1,5 @@
 import asyncio
+import functools
 
 
 def ping_pong(mode, options):
@@ -16,70 +17,58 @@ def ping_pong(mode, options):
                    registry=consul_client(loop=loop))
 
     if 'client' == mode:
-        for i in range(int(options.concurrent)):
-            if options.async:
-                app.register_module(
-                    async_ping_client(int(options.port) + i,
-                                      delay=int(options.delay),
-                                      times=int(options.times)))
-            else:
-                app.register_module(
-                    blocking_ping_client(int(options.port) + i,
-                                         delay=int(options.delay),
-                                         times=int(options.times)))
-    if 'client-router' == mode:
-        for i in range(int(options.concurrent)):
-            app.register_module(ping_router_client(int(options.port) + i,
-                                                   delay=int(options.delay),
-                                                   times=int(options.times)))
+        app.register_module(
+            ping_client(int(options.port),
+                        delay=int(options.delay),
+                        times=int(options.times),
+                        routing=options.routing,
+                        async=options.async))
+
     if 'server' == mode:
-        for i in range(int(options.concurrent)):
-            app.register_module(pong_service(delay=int(options.delay)))
-    if 'server-router' == mode:
-        for i in range(int(options.concurrent)):
-            app.register_module(pong_router_service(delay=int(options.delay)))
+        app.register_module(
+            pong_service(delay=int(options.delay),
+                         routing=options.routing))
     app.run()
 
 
-def pong_service(delay=1):
+def pong_service(**options):
+    delay = options.pop('delay', 1)
+    routing = options.pop('routing', False)
+
     from wolverine.modules.zmq import ZMQMicroModule
     from wolverine.modules import zhelpers
     module = ZMQMicroModule()
 
-    @module.handler('ping', listen_type='health', handler_type='server')
-    def pong(data):
-        zhelpers.dump(data)
-        yield from asyncio.sleep(delay)
-        return data
+    if not routing:
+        @module.handler('ping', listen_type='health', handler_type='server')
+        def pong(data):
+            zhelpers.dump(data)
+            yield from asyncio.sleep(delay)
+            return data
+    else:
+        @module.handler('ping', route='ping1', listen_type='health',
+                        handler_type='server')
+        def pong1(data):
+            print('--ping1 handler--')
+            zhelpers.dump(data)
+            yield from asyncio.sleep(delay)
+            return data
 
+        @module.handler('ping', route='ping2', listen_type='health',
+                        handler_type='server')
+        def pong2(data):
+            print('--ping2 handler--')
+            zhelpers.dump(data)
+            yield from asyncio.sleep(delay)
+            return data
     return module
 
 
-def pong_router_service(delay=1):
-    from wolverine.modules.zmq import ZMQMicroModule
-    from wolverine.modules import zhelpers
-    module = ZMQMicroModule()
-
-    @module.handler('ping', route='ping1', listen_type='health',
-                    handler_type='server')
-    def pong(data):
-        print('--ping1 handler--')
-        zhelpers.dump(data)
-        yield from asyncio.sleep(delay)
-        return data
-
-    @module.handler('ping', route='ping2', listen_type='health',
-                    handler_type='server')
-    def pong2(data):
-        print('--ping2 handler--')
-        zhelpers.dump(data)
-        yield from asyncio.sleep(delay)
-        return data
-
-    return module
-
-
-def blocking_ping_client(port, delay=1, times=-1):
+def ping_client(port, **options):
+    delay = options.pop('delay', 1)
+    times = options.pop('times', -1)
+    routing = options.pop('routing', False)
+    async = options.pop('async', False)
     from wolverine.modules.zmq import ZMQMicroModule
     module = ZMQMicroModule()
 
@@ -90,80 +79,47 @@ def blocking_ping_client(port, delay=1, times=-1):
         'service_id': 'ping' + str(port)
     }
 
-    @module.client('ping', **ping_opts)
+    def get_result(count, future):
+        data = future.result()
+        print('response:', data)
+        print('response count:', count)
+        if data['message'] == times == count:
+            module.app.loop.create_task(module.app.exit('SIGTERM'))
+
+    @module.client('ping', async=async, **ping_opts)
     def ping():
-        count = 1
-        while count <= times or times <= 0:
+        send_count = 1
+        while send_count <= times or times <= 0:
             yield from asyncio.sleep(delay)
-            data = (b'data', b'message', str(count).encode('utf-8'))
-            print("ping", count)
-            response = yield from module.router.send(data, 'ping')
-            print('response:', response)
-            count += 1
-        yield from module.app.exit('SIGTERM')
+            data = {'message': send_count}
+            print('sending ', data, 'to ping/ping1')
+            if async:
+                future = asyncio.Future()
+                yield from module.router.send(data, 'ping/ping1',
+                                              future=future)
+                future.add_done_callback(
+                    functools.partial(get_result, send_count))
+                if routing:
+                    send_count += 1
+                    data2 = {'message': send_count}
+                    print('sending ', data2, 'to ping/ping2')
+                    future2 = asyncio.Future()
+                    yield from module.router.send(data2, 'ping/ping2',
+                                                  future=future2)
+                    future2.add_done_callback(
+                        functools.partial(get_result, send_count))
 
-    return module
-
-
-def async_ping_client(port, delay, times=-1):
-    from wolverine.modules.zmq import ZMQMicroModule
-    module = ZMQMicroModule()
-
-    ping_opts = {
-        'address': 'tcp://127.0.0.1',
-        'port': port,
-        'tags': ['DEALER_BIND'],
-        'service_id': 'ping' + str(port)
-    }
-
-    @module.client('ping', **ping_opts)
-    def ping():
-        count = 1
-        while count <= times or times <= 0:
-            yield from asyncio.sleep(delay)
-            data = (b'data', b'message', str(count).encode('utf-8'))
-            yield from module.router.send(data, 'ping', async=True)
-            count += 1
-        # yield from module.app.exit('SIGTERM')
-    return module
-
-
-def ping_router_client(port, delay=1, times=-1):
-    from wolverine.modules.zmq import ZMQMicroModule
-    module = ZMQMicroModule()
-
-    ping_opts = {
-        'address': 'tcp://127.0.0.1',
-        'port': port,
-        'tags': ['DEALER_BIND'],
-        'service_id': 'ping' + str(port)
-    }
-
-    @module.handler('ping', handler_type='client', **ping_opts)
-    def ping(client):
-        @asyncio.coroutine
-        def callback():
-            alive = True
-            pong_count = 0
-            while alive:
-                data = yield from client.read()
-                pong_count += 1
-                print('ponged', pong_count)
-                print('data:', data)
-                if pong_count == times * 2:
-                    alive = False
-                    module.app.exit('SIGTERM')
-
-        module.app.loop.create_task(callback())
-
-        count = 1
-        while count <= times or times <= 0:
-            yield from asyncio.sleep(delay)
-            data = (b'data', b'message', str(count).encode('utf-8'))
-            print("ping", count)
-            yield from module.router.send(data, 'ping/ping1')
-            data = (b'data2', b'message2', str(count).encode('utf-8'))
-            yield from module.router.send(data, 'ping/ping2')
-            count += 1
-
+            else:
+                response = yield from module.router.send(data, 'ping/ping1')
+                print('response:', response)
+                if routing and send_count < times:
+                    send_count += 1
+                    data2 = {'message': send_count}
+                    print('sending ', data2, 'to ping/ping2')
+                    response = yield from module.router.send(data2,
+                                                             'ping/ping2')
+                    print('response:', response)
+            send_count += 1
+        if not async:
+            module.app.loop.create_task(module.app.exit('SIGTERM'))
     return module

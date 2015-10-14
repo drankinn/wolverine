@@ -30,6 +30,7 @@ class MicroApp(object):
             self.loop.add_signal_handler(getattr(signal, sig),
                                          functools.partial(_exit,
                                                            sig))
+        print('\n--WOLVERINE--\n')
 
     def register_module(self, module):
         print("registering module", module.name)
@@ -37,6 +38,7 @@ class MicroApp(object):
         self.modules.append(module)
 
     def run(self):
+        print('running app', self.__class__.__name__)
         if self.registry is None:
             self.registry = self._default_registry()
         self.registry.run()

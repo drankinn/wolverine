@@ -1,4 +1,6 @@
 import asyncio
+import uuid
+import msgpack
 import re
 
 
@@ -9,6 +11,7 @@ class MicroRouter(object):
         self.client_handlers = {}
         self.clients = {}
         self.servers = {}
+        self.async_req_queue = {}
 
     def exit(self):
         for service_name in list(self.servers.keys()):
@@ -65,9 +68,11 @@ class MicroRouter(object):
             del self.service_handlers[handler]
 
     def handle_service(self, data):
-        route = '.*'
-        if len(data) > 0:
-            route = data[1]
+        route = data[-2]
+        print('\n')
+        print('-'*20)
+        # print('data:', data)
+        print('handling data for route', route)
         return self._handle_service(route, data)
 
     def _handle_service(self, route, data):
@@ -94,8 +99,21 @@ class MicroRouter(object):
             client.write(data)
             yield from client.drain()
 
+    def _send(self, data, client):
+        client.write(data)
+        yield from client.drain()
+        data = yield from client.read()
+        return data
+
+    @asyncio.coroutine
+    def _send_async(self, data, client, correlation_id, future):
+        self.async_req_queue[correlation_id] = future
+        client.write(data)
+        yield from client.drain()
+        return future
+
     def send(self, data, route='.*', **options):
-        async = options.pop('async', False)
+        future = options.pop('future', None)
         service = route.split('/')[0]
         if len(route.split('/')) < 2:
             route += '/'
@@ -103,13 +121,15 @@ class MicroRouter(object):
         if service in links.keys():
             service_name = service + ':' + links[service]
             client = self.clients[service_name]
-            data = (bytes(route, encoding='utf-8'),) + data
-            client.write(data)
-            yield from client.drain()
-            if not async:
-                # need to make this async anyways and give them back a future
-                try:
-                    data = yield from client.read()
-                    return data
-                except Exception as e:
-                    print(e)
+            correlation_id = str(uuid.uuid1())[:8]
+            b_data = msgpack.packb(data, use_bin_type=True)
+            packet = (bytes(correlation_id, encoding='utf-8'),
+                      bytes(route, encoding='utf-8'),
+                      b_data)
+            if not future:
+                response = yield from self._send(packet, client)
+                response = msgpack.unpackb(response[-1])
+            else:
+                response = yield from self._send_async(packet, client,
+                                                       correlation_id, future)
+            return response
