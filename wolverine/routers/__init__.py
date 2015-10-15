@@ -1,7 +1,10 @@
 import asyncio
+import logging
 import uuid
 import msgpack
 import re
+
+logger = logging.getLogger(__name__)
 
 
 class MicroRouter(object):
@@ -19,13 +22,13 @@ class MicroRouter(object):
         for client_name in list(self.clients.keys()):
             self.remove_client(client_name)
         self.service_handlers = {}
-        print("router exited")
+        logger.info("router exited")
 
     def add_client(self, client, name):
         if name not in self.clients.keys():
             self.clients[name] = client
         else:
-            print('warning: not overriding a client with route', name)
+            logger.warning('not overriding a client with route ' + name)
 
     def remove_client(self, name):
         if name in self.clients.keys():
@@ -37,7 +40,7 @@ class MicroRouter(object):
             self.servers[name] = service
             return True
         else:
-            print('service', name, 'already registered')
+            logger.warning('service ' + name + ' already registered')
             return False
 
     def remove_server(self, name):
@@ -52,8 +55,9 @@ class MicroRouter(object):
 
     def remove_service_handler(self, handler):
         if handler in self.service_handlers.keys():
-            print('removing all handlers for route ', handler)
-            print('removed', len(self.service_handlers[handler]), 'handlers')
+            logger.info('removing all handlers for route ' + handler)
+            logger.info('removed ' + str(len(self.service_handlers[handler])) +
+                        ' handlers')
             del self.service_handlers[handler]
 
     def add_client_handler(self, route, func):
@@ -63,16 +67,14 @@ class MicroRouter(object):
 
     def remove_client_handler(self, handler):
         if handler in self.service_handlers.keys():
-            print('removing all handlers for route ', handler)
-            print('removed', len(self.service_handlers[handler]), 'handlers')
+            logger.info('removing all handlers for route ' + handler)
+            logger.info('removed ' + str(len(self.service_handlers[handler])) +
+                        'handlers')
             del self.service_handlers[handler]
 
     def handle_service(self, data):
         route = data[-2]
-        print('\n')
-        print('-'*20)
-        # print('data:', data)
-        print('handling data for route', route)
+        logger.info('handling data for route ' + route.decode('utf-8'))
         return self._handle_service(route, data)
 
     def _handle_service(self, route, data):
@@ -90,7 +92,7 @@ class MicroRouter(object):
                     except Exception as ex:
                         result['errors'].append(ex)
         if not found:
-            print('no matching route for', route)
+            logger.info('no matching route for' + route)
         return result
 
     def reply(self, data, name):

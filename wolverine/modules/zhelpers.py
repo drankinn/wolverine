@@ -5,14 +5,18 @@ Helper module for example applications. Mimics ZeroMQ Guide's zhelpers.h.
 from __future__ import print_function
 
 import binascii
+import logging
+import msgpack
 import os
 from random import randint
 
 import zmq
 
+logger = logging.getLogger(__name__)
 
-# 
+
 def dump(msg_or_socket):
+    out = '\n-------data-packet-------'
     """Receives all message parts from socket, printing each frame neatly"""
     if isinstance(msg_or_socket, zmq.Socket):
         # it's a socket, call on current message
@@ -20,13 +24,16 @@ def dump(msg_or_socket):
     else:
         msg = msg_or_socket
     for part in msg:
-        print("[%03d]" % len(part), end=' ')
-        is_text = True
+        out += "\n[%03d] " % len(part)
         try:
-            print(part.decode('ascii'))
+            out += part.decode('utf-8')
         except UnicodeDecodeError:
-            print(r"0x%s" % (binascii.hexlify(part).decode('ascii')))
-    print("-"*20)
+            try:
+                out += str(msgpack.unpackb(part))
+            except Exception:
+                out += r"0x%s" % (binascii.hexlify(part).decode('ascii'))
+    out += '\n' + '-'*25
+    logger.debug(out)
 
 
 def set_id(zsocket):

@@ -1,8 +1,11 @@
 import asyncio
+import logging
 import signal
 import functools
 import sys
 from wolverine.discovery import MicroRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class MicroApp(object):
@@ -11,11 +14,12 @@ class MicroApp(object):
     _default_registry = MicroRegistry
 
     def __init__(self, loop=None, registry=None):
+
         self.tasks = []
         self.modules = []
         self.router = {}
         if registry is not None and not isinstance(registry, MicroRegistry):
-            print('registry must be an instance of MicroRegistry')
+            logger.info('registry must be an instance of MicroRegistry')
             return
         self.registry = registry
         if loop is None:
@@ -30,26 +34,29 @@ class MicroApp(object):
             self.loop.add_signal_handler(getattr(signal, sig),
                                          functools.partial(_exit,
                                                            sig))
-        print('\n--WOLVERINE--\n')
+        print('-'*20)
+        print('   --WOLVERINE--')
+        print('-'*20)
+        print('')
 
     def register_module(self, module):
-        print("registering module", module.name)
+        logger.info("registering module" + module.name)
         module.register_app(self)
         self.modules.append(module)
 
     def run(self):
-        print('running app', self.__class__.__name__)
+        logger.info('running app' + self.__class__.__name__)
         if self.registry is None:
             self.registry = self._default_registry()
         self.registry.run()
         for module in self.modules:
             module.run()
         self.loop.run_forever()
-        print('closing loop')
+        logger.info('closing loop')
         try:
             self.loop.close()
-        except Exception as ex:
-            print('boom', ex)
+        except Exception:
+            logger.error('boom', exc_info=True)
 
     def exit(self, sig_name):
         if sig_name in self.SIG_NAMES:
@@ -59,7 +66,7 @@ class MicroApp(object):
             for task in tasks:
                 try:
                     task.cancel()
-                except Exception as e:
-                    print(e)
+                except Exception:
+                    logger.error('failed to cancel task', exc_info=True)
             self.loop.stop()
 

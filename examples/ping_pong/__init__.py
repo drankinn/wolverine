@@ -1,5 +1,8 @@
 import asyncio
+import logging
 import functools
+
+logger = logging.getLogger(__name__)
 
 
 def ping_pong(mode, options):
@@ -32,6 +35,7 @@ def ping_pong(mode, options):
 
 
 def pong_service(**options):
+
     delay = options.pop('delay', 1)
     routing = options.pop('routing', False)
 
@@ -42,23 +46,26 @@ def pong_service(**options):
     if not routing:
         @module.handler('ping', listen_type='health', handler_type='server')
         def pong(data):
-            zhelpers.dump(data)
+            if logger.getEffectiveLevel() == logging.DEBUG:
+                zhelpers.dump(data)
             yield from asyncio.sleep(delay)
             return data
     else:
         @module.handler('ping', route='ping1', listen_type='health',
                         handler_type='server')
         def pong1(data):
-            print('--ping1 handler--')
-            zhelpers.dump(data)
+            if logger.getEffectiveLevel() == logging.DEBUG:
+                logger.debug('--ping1 handler--')
+                zhelpers.dump(data)
             yield from asyncio.sleep(delay)
             return data
 
         @module.handler('ping', route='ping2', listen_type='health',
                         handler_type='server')
         def pong2(data):
-            print('--ping2 handler--')
-            zhelpers.dump(data)
+            if logger.getEffectiveLevel() == logging.DEBUG:
+                logger.debug('--ping2 handler--')
+                zhelpers.dump(data)
             yield from asyncio.sleep(delay)
             return data
     return module
@@ -81,8 +88,8 @@ def ping_client(port, **options):
 
     def get_result(count, future):
         data = future.result()
-        print('response:', data)
-        print('response count:', count)
+        logger.info('response:' + str(data))
+        logger.info('response count:' + str(count))
         if data['message'] == times == count:
             module.app.loop.create_task(module.app.exit('SIGTERM'))
 
@@ -92,7 +99,7 @@ def ping_client(port, **options):
         while send_count <= times or times <= 0:
             yield from asyncio.sleep(delay)
             data = {'message': send_count}
-            print('sending ', data, 'to ping/ping1')
+            logger.info('sending ' + str(data) + ' to ping/ping1')
             if async:
                 future = asyncio.Future()
                 yield from module.router.send(data, 'ping/ping1',
@@ -102,7 +109,7 @@ def ping_client(port, **options):
                 if routing:
                     send_count += 1
                     data2 = {'message': send_count}
-                    print('sending ', data2, 'to ping/ping2')
+                    logger.info('sending ' + str(data2) + 'to ping/ping2')
                     future2 = asyncio.Future()
                     yield from module.router.send(data2, 'ping/ping2',
                                                   future=future2)
@@ -111,14 +118,14 @@ def ping_client(port, **options):
 
             else:
                 response = yield from module.router.send(data, 'ping/ping1')
-                print('response:', response)
+                logger.info('response:' + str(response))
                 if routing and send_count < times:
                     send_count += 1
                     data2 = {'message': send_count}
-                    print('sending ', data2, 'to ping/ping2')
+                    logger.info('sending ' + str(data2) + 'to ping/ping2')
                     response = yield from module.router.send(data2,
                                                              'ping/ping2')
-                    print('response:', response)
+                    logger.info('response:' + str(response))
             send_count += 1
         if not async:
             module.app.loop.create_task(module.app.exit('SIGTERM'))
