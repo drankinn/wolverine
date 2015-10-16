@@ -24,12 +24,11 @@ class MicroApp(object):
         self.config.read(default_settings)
 
         self.tasks = []
-        self.modules = []
-        self.registry = self.router = None
+        self.modules = {}
         self.loop = loop or asyncio.get_event_loop()
 
         def _exit(sig_name):
-            self.loop.create_task(self.exit(sig_name))
+            self.loop.create_task(self.stop(sig_name))
 
         for sig in self.SIG_NAMES:
             self.loop.add_signal_handler(getattr(signal, sig),
@@ -39,21 +38,21 @@ class MicroApp(object):
     def register_module(self, module):
         logger.info("registering module" + module.name)
         module.register_app(self)
-        self.modules.append(module)
+        self.modules[module.name] = module
 
-    def _load_part(self, app_var):
+    def _get_module_class(self, app_var):
         _path = self.config['APP'][app_var]
         module_name, class_name = _path.rsplit(".", 1)
         _module = importlib.import_module(module_name)
         return getattr(_module, class_name)()
 
     def _load_registry(self):
-        self.registry = self._load_part('REGISTRY')
-        self.registry.register_app(self)
+        registry = self._get_module_class('REGISTRY')
+        self.register_module(registry)
 
     def _load_router(self):
-        self.router = self._load_part('ROUTER')
-        self.router.register_app(self)
+        router = self._get_module_class('ROUTER')
+        self.register_module(router)
 
     def run(self):
         self.name = self.config['APP'].get('NAME', 'Spooky Ash')
@@ -66,8 +65,7 @@ class MicroApp(object):
         self._load_registry()
         self._load_router()
 
-        self.registry.run()
-        for module in self.modules:
+        for key, module in self.modules.items():
             module.run()
         self.loop.run_forever()
         logger.info('closing loop')
@@ -76,10 +74,10 @@ class MicroApp(object):
         except Exception:
             logger.error('boom', exc_info=True)
 
-    def exit(self, sig_name):
+    def stop(self, sig_name):
         if sig_name in self.SIG_NAMES:
-            for module in self.modules:
-                yield from module.exit()
+            for key, module in self.modules.items():
+                yield from module.stop()
             tasks = asyncio.Task.all_tasks(self.loop)
             for task in tasks:
                 try:
@@ -87,4 +85,10 @@ class MicroApp(object):
                 except Exception:
                     logger.error('failed to cancel task', exc_info=True)
             self.loop.stop()
+
+    def __getattr__(self, item):
+        if item in self.modules.keys():
+            return self.modules[item]
+        else:
+            raise AttributeError('no module' + item + 'in the app')
 

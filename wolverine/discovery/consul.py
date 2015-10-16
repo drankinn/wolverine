@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import aiohttp
+import os
 from consul import Check
 from functools import wraps
 from consul.aio import Consul
@@ -13,16 +13,25 @@ logger = logging.getLogger(__name__)
 class MicroConsul(MicroRegistry):
     def __init__(self):
         super(MicroConsul, self).__init__()
+        self.name = 'registry'
         self.binds = {}
         self.health_tasks = {}
         self.run_tick = 3
         self.is_connected = False
         self._loop = None
         self._registry = None
+        self.alive = False
+        import wolverine.discovery
+        self.default_settings = os.path.join(wolverine.discovery.__path__[0],
+                                             'consul.ini')
 
     def register_app(self, app):
+        self.app = app
+        app.config.read(self.default_settings)
         self._loop = app.loop
-        self.config = app.config['DISCOVERY']
+
+    def run(self):
+        self.config = self.app.config['DISCOVERY']
         self.host = self.config.get('HOST', 'localhost')
         self.port = int(self.config.get('PORT', '8500'))
         self.token = self.config.get('TOKEN', None)
@@ -30,9 +39,32 @@ class MicroConsul(MicroRegistry):
         self.consistency = self.config.get('CONSISTENCY', 'default')
         self.dc = self.config.get('DC', None)
         self.verify = self.config.get('VERIFY', True)
+        self._connect()
+        logger.info('Consul - Initializing discovery listeners')
+
+        def node_change(data):
+            logger.info("node:" + str(data))
+            pass
+
+        self.bind_listener('node', 'node', node_change)
+        self.run_task = self._loop.create_task(self.run_forever())
+
+    @asyncio.coroutine
+    def stop(self):
+        self.alive = False
+
+    def _connect(self):
+        self._registry = Consul(self.host, self.port, self.token, self.scheme,
+                                self.consistency, self.dc, self.verify,
+                                loop=self._loop)
+        self.agent = self._registry.agent
+        self.catalog = self._registry.catalog
+        self.health = self._registry.health
+        self.kv = self._registry.kv
 
     def run_forever(self):
-        while True:
+        self.alive = True
+        while self.alive:
             if not self.is_connected:
                 try:
                     agent_data = yield from self._registry.agent.self()
@@ -50,26 +82,6 @@ class MicroConsul(MicroRegistry):
                 if bind.state in [0, -1]:
                     logger.info('binding ' + bind.name)
                     self._loop.create_task(bind.run())
-
-    def _connect(self):
-        self._registry = Consul(self.host, self.port, self.token, self.scheme,
-                                self.consistency, self.dc, self.verify,
-                                loop=self._loop)
-        self.agent = self._registry.agent
-        self.catalog = self._registry.catalog
-        self.health = self._registry.health
-        self.kv = self._registry.kv
-
-    def run(self):
-        self._connect()
-        logger.info('Consul - Initializing discovery listeners')
-
-        def node_change(data):
-            logger.info("node:" + str(data))
-            pass
-
-        self.bind_listener('node', 'node', node_change)
-        self._loop.create_task(self.run_forever())
 
     def bind_listener(self, bind_type, name, func, **kwargs):
         bind = None
@@ -197,11 +209,9 @@ class ConsulBind(object):
             self.callbacks.append(callback)
         self.params = kwargs
 
+    @asyncio.coroutine
     def run(self):
-        yield self._run()
-
-    def _run(self):
-        yield 1
+        pass
 
     def wrap_callback(self, callback, app_data):
         def wrap(data):

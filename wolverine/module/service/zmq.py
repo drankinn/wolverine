@@ -6,24 +6,23 @@ import aiozmq
 import msgpack
 import types
 import zmq
-from . import MicroModule
+from . import MicroService
 from .zhelpers import event_description
 
 logger = logging.getLogger(__name__)
 
 
-class ZMQMicroModule(MicroModule):
+class ZMQMicroService(MicroService):
     bind_types = {
         "observer": zmq.ROUTER,
         'provider': zmq.DEALER
     }
 
     def __init__(self):
-        super(ZMQMicroModule, self).__init__()
-        # self.streams = {}
+        super(ZMQMicroService, self).__init__()
 
     @asyncio.coroutine
-    def exit(self):
+    def stop(self):
         logger.info('closing module ' + self.name)
         for key in self.router.clients.keys():
             try:
@@ -32,9 +31,8 @@ class ZMQMicroModule(MicroModule):
             except Exception:
                 logger.error('failed to deregister client' + key,
                              exc_info=True)
-        self.router.exit()
 
-    def _connect_client(self, name, func, **options):
+    def connect_client(self, name, func, **options):
         port = options.pop('port', '9210')
         async = options.pop('async', False)
         address = options.pop('address', 'tcp://127.0.0.1')
@@ -80,7 +78,7 @@ class ZMQMicroModule(MicroModule):
             client.close()
             return
         if async:
-            self.app.loop.create_task(self._connect_client_handler(client))
+            self.app.loop.create_task(self.connect_client_handler(client))
         try:
             response = func()
             if isinstance(response, types.GeneratorType):
@@ -92,7 +90,7 @@ class ZMQMicroModule(MicroModule):
             logger.error('client closing')
             client.close()
 
-    def _connect_client_handler(self, client):
+    def connect_client_handler(self, client):
         while True:
             response = yield from client.read()
             correlation_id = response[0].decode('utf-8')
@@ -103,7 +101,7 @@ class ZMQMicroModule(MicroModule):
                     future.set_result(data)
 
     @asyncio.coroutine
-    def _connect_service(self, name, func, **options):
+    def connect_service(self, name, func, **options):
         route = name + '/' + options.pop('route', ".*")
         self.router.add_service_handler(route, func)
         bind_type = options.pop('bind_type', zmq.ROUTER)
@@ -136,7 +134,7 @@ class ZMQMicroModule(MicroModule):
                         port = s.pop('Port', '')
                         uri = address + ':' + str(port)
                         service = yield from \
-                            self.zmq_service(key, uri, bind_type)
+                            self.connect_service_handler(key, uri, bind_type)
                         self.router.add_server(key, service)
                     for key in removed:
                         logger.info('removed handler for ' + key)
@@ -145,7 +143,7 @@ class ZMQMicroModule(MicroModule):
                 logger.error('service binding error:', exc_info=True)
 
     @asyncio.coroutine
-    def zmq_service(self, service_name, address, bind_type):
+    def connect_service_handler(self, service_name, address, bind_type):
         server = yield from aiozmq.create_zmq_stream(bind_type)
         yield from server.transport.enable_monitor()
         yield from server.transport.connect(address)
@@ -158,7 +156,7 @@ class ZMQMicroModule(MicroModule):
                 try:
                     work = yield from server.read()
                     self.app.loop.create_task(
-                        self.handle_data(work, service_name))
+                        self.handle_service_data(work, service_name))
                 except aiozmq.ZmqStreamClosed:
                     logger.info('zmq stream ' + service_name + ' closed')
                     alive = False
@@ -180,7 +178,7 @@ class ZMQMicroModule(MicroModule):
             logger.debug('monitoring closed for stream ' + name)
 
     @asyncio.coroutine
-    def handle_data(self, d, service_name):
+    def handle_service_data(self, d, service_name):
         state = 0
         try:
             responses = self.router.handle_service(d)

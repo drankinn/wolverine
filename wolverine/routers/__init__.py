@@ -3,23 +3,24 @@ import logging
 import uuid
 import msgpack
 import re
+from wolverine.module import MicroModule
 
 logger = logging.getLogger(__name__)
 
 
-class MicroRouter(object):
+class MicroRouter(MicroModule):
 
     def __init__(self):
+        super(MicroRouter, self).__init__()
+        self.name = 'router'
         self.service_handlers = {}
         self.client_handlers = {}
         self.clients = {}
         self.servers = {}
         self.async_req_queue = {}
 
-    def register_app(self, app):
-        self.app = app
-
-    def exit(self):
+    @asyncio.coroutine
+    def stop(self):
         for service_name in list(self.servers.keys()):
             self.remove_server(service_name)
         for client_name in list(self.clients.keys()):

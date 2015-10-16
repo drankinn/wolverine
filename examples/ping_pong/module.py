@@ -1,8 +1,10 @@
 import asyncio
-from configparser import ConfigParser
 import logging
 import os
 import functools
+from wolverine.module.service import zhelpers
+from wolverine.module.service.zmq import ZMQMicroService
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,9 +41,7 @@ def pong_service(**options):
     delay = options.pop('delay', 1)
     routing = options.pop('routing', False)
 
-    from wolverine.modules.zmq import ZMQMicroModule
-    from wolverine.modules import zhelpers
-    module = ZMQMicroModule()
+    module = ZMQMicroService()
 
     if not routing:
         @module.handler('ping', listen_type='health', handler_type='server')
@@ -76,8 +76,7 @@ def ping_client(port, **options):
     times = options.pop('times', -1)
     routing = options.pop('routing', False)
     async = options.pop('async', False)
-    from wolverine.modules.zmq import ZMQMicroModule
-    module = ZMQMicroModule()
+    module = ZMQMicroService()
 
     ping_opts = {
         'address': 'tcp://127.0.0.1',
@@ -91,7 +90,7 @@ def ping_client(port, **options):
         logger.info('response:' + str(data))
         logger.info('response count:' + str(count))
         if data['message'] == times == count:
-            module.app.loop.create_task(module.app.exit('SIGTERM'))
+            module.app.loop.create_task(module.app.stop('SIGTERM'))
 
     @module.client('ping', async=async, **ping_opts)
     def ping():
@@ -130,7 +129,7 @@ def ping_client(port, **options):
                         logger.info('response:' + str(response))
                 send_count += 1
             if not async:
-                module.app.loop.create_task(module.app.exit('SIGTERM'))
+                module.app.loop.create_task(module.app.stop('SIGTERM'))
         except asyncio.CancelledError:
             logger.debug('ping client killed')
     return module
