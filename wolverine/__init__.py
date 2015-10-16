@@ -1,9 +1,11 @@
 import asyncio
+from configparser import ConfigParser
 import logging
+import importlib
+import os
 import signal
 import functools
-import sys
-from wolverine.discovery import MicroRegistry
+from .discovery import MicroRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -13,19 +15,18 @@ class MicroApp(object):
 
     _default_registry = MicroRegistry
 
-    def __init__(self, loop=None, registry=None):
+    def __init__(self, loop=None, config_file='settings.ini'):
+        self.name = ''
+        self.config_file = config_file
+        default_settings = os.path.join(__path__[0],
+                                        'settings.ini')
+        self.config = ConfigParser()
+        self.config.read(default_settings)
 
         self.tasks = []
         self.modules = []
-        self.router = {}
-        if registry is not None and not isinstance(registry, MicroRegistry):
-            logger.info('registry must be an instance of MicroRegistry')
-            return
-        self.registry = registry
-        if loop is None:
-            self.loop = asyncio.get_event_loop()
-        else:
-            self.loop = loop
+        self.registry = self.router = None
+        self.loop = loop or asyncio.get_event_loop()
 
         def _exit(sig_name):
             self.loop.create_task(self.exit(sig_name))
@@ -34,20 +35,37 @@ class MicroApp(object):
             self.loop.add_signal_handler(getattr(signal, sig),
                                          functools.partial(_exit,
                                                            sig))
-        print('-'*20)
-        print('   --WOLVERINE--')
-        print('-'*20)
-        print('')
 
     def register_module(self, module):
         logger.info("registering module" + module.name)
         module.register_app(self)
         self.modules.append(module)
 
+    def _load_part(self, app_var):
+        _path = self.config['APP'][app_var]
+        module_name, class_name = _path.rsplit(".", 1)
+        _module = importlib.import_module(module_name)
+        return getattr(_module, class_name)()
+
+    def _load_registry(self):
+        self.registry = self._load_part('REGISTRY')
+        self.registry.register_app(self)
+
+    def _load_router(self):
+        self.router = self._load_part('ROUTER')
+        self.router.register_app(self)
+
     def run(self):
-        logger.info('running app' + self.__class__.__name__)
-        if self.registry is None:
-            self.registry = self._default_registry()
+        self.name = self.config['APP'].get('NAME', 'Spooky Ash')
+        self.config.read(self.config_file)
+        print('-'*20)
+        print('   --', self.name, '--')
+        print('-'*20)
+        print('')
+
+        self._load_registry()
+        self._load_router()
+
         self.registry.run()
         for module in self.modules:
             module.run()

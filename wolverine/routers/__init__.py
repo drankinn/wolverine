@@ -16,6 +16,9 @@ class MicroRouter(object):
         self.servers = {}
         self.async_req_queue = {}
 
+    def register_app(self, app):
+        self.app = app
+
     def exit(self):
         for service_name in list(self.servers.keys()):
             self.remove_server(service_name)
@@ -32,7 +35,10 @@ class MicroRouter(object):
 
     def remove_client(self, name):
         if name in self.clients.keys():
-            self.clients[name].close()
+            try:
+                self.clients[name].close()
+            except Exception:
+                logger.error('error closing client ' + name, exc_info=True)
             del self.clients[name]
 
     def add_server(self, name, service):

@@ -6,8 +6,8 @@ import aiozmq
 import msgpack
 import types
 import zmq
-from wolverine.modules import MicroModule
-from wolverine.modules.zhelpers import event_description
+from . import MicroModule
+from .zhelpers import event_description
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +22,16 @@ class ZMQMicroModule(MicroModule):
         super(ZMQMicroModule, self).__init__()
         # self.streams = {}
 
-    def run(self):
-        logger.info('running module ' + self.name)
-
     @asyncio.coroutine
     def exit(self):
         logger.info('closing module ' + self.name)
         for key in self.router.clients.keys():
-            yield from self.app.registry.deregister(key,
-                                                    register_type='service')
+            try:
+                yield from \
+                    self.app.registry.deregister(key, register_type='service')
+            except Exception:
+                logger.error('failed to deregister client' + key,
+                             exc_info=True)
         self.router.exit()
 
     def _connect_client(self, name, func, **options):
@@ -38,8 +39,7 @@ class ZMQMicroModule(MicroModule):
         async = options.pop('async', False)
         address = options.pop('address', 'tcp://127.0.0.1')
         uri = address + ':' + str(port)
-        logger.info('-' * 20 +
-                    '\nclient connect for service: ' + name)
+        logger.info('client connect for service: ' + name)
         service_id = str(uuid1())[:7]
         service_name = name + ':' + service_id
         try:
@@ -52,7 +52,8 @@ class ZMQMicroModule(MicroModule):
             yield from client.transport.bind(uri)
             self.router.add_client(client, service_name)
         except Exception as ex:
-            logger.error('failed to bind zqm socket for dealer ' + service_name,
+            logger.error('failed to bind zqm socket for dealer ' +
+                         service_name,
                          exc_info=True)
             return
 
