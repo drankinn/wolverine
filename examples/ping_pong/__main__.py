@@ -13,8 +13,6 @@ def main():
     parser = OptionParser(usage)
     parser.add_option("-p", "--port", dest="port",
                       help="port to bind to", default='9210')
-    parser.add_option("-c", "--concurrent", dest="concurrent",
-                      help="concurrent workers", default="1")
     parser.add_option("-d", "--delay", dest="delay",
                       help="simulated workload delay", default="1")
     parser.add_option("-t", "--times", dest="times",
@@ -22,7 +20,7 @@ def main():
     parser.add_option("-r", "--routing", dest="routing", action='store_true',
                       help="enable advanced routing")
     parser.add_option("-a", "--async", dest="async", action='store_true',
-                      help="enable async client")
+                      help="enable async client/service worker")
     parser.add_option("-l", "--log-level", dest="loglevel",
                       help="log level one of "
                            "(DEBUG, INFO, WARNING, ERROR, Critical)",
