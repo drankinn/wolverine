@@ -1,5 +1,8 @@
 import asyncio
+import logging
 from wolverine.routers import MicroRouter
+
+logger = logging.getLogger(__name__)
 
 
 class MicroModule(object):
@@ -9,11 +12,13 @@ class MicroModule(object):
         self.router = MicroRouter()
 
     def run(self):
-        print('running module', self.name)
+        logger.info('running module ' + self.name)
+        for handler in self.handlers:
+            self._connect_handler(handler)
 
     @asyncio.coroutine
     def exit(self):
-        print('closing module', self.name)
+        logger.debug('closing module ' + self.name)
 
     def handler(self, service, **options):
         """Collects data to build zmq endpoints based on consul services
@@ -37,35 +42,29 @@ class MicroModule(object):
             return f
         return decorator
 
-    def register_app(self, app, **options):
+    def register_app(self, app):
         """Called by Micro App to register a module and it's routes.
         binds callback for consul and initializes zmq endpoints
-
-        :param app:
-        :param options:
-        :return:
         """
         self.app = app
-        for handler in self.handlers:
-            self._connect_handler(handler)
 
     def _connect_handler(self, handler):
         name, handler_type, func, options = handler
-        if 'server' == handler_type:
-            self.app.loop.create_task(
-                self._connect_service(name, func, **options))
-        if 'client' == handler_type:
-            self.app.loop.create_task(
-                self._connect_client(name, func, **options))
+        try:
+            if 'server' == handler_type:
+                self.app.loop.create_task(
+                    self._connect_service(name, func, **options))
+            if 'client' == handler_type:
+                self.app.loop.create_task(
+                    self._connect_client(name, func, **options))
+        except Exception:
+            logger.error('handler connect failed for ' + name, exc_info=True)
 
     def add_handler(self, name, handler_type, f, **options):
         self.handlers.append((name, handler_type, f, options))
 
-    def add_client(self, name, func, **options):
-        print('adding client', name)
-
     def _connect_service(self, name, func, **options):
-        print('connecting handler service', name)
+        logger.debug('connecting handler service ' + name)
 
     def _connect_client(self, name, func, **options):
-        print('connecting handler client', name)
+        logger.debug('connecting handler client ' + name)

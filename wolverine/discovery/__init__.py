@@ -4,6 +4,9 @@ class MicroRegistry(object):
     def __init__(self, **kwargs):
         pass
 
+    def register_app(self, app):
+        pass
+
     def register(self, key, value, **options):
         pass
 

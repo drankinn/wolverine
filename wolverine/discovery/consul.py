@@ -1,87 +1,35 @@
 import asyncio
+import logging
+import aiohttp
 from consul import Check
 from functools import wraps
 from consul.aio import Consul
 import types
 from wolverine.discovery import MicroRegistry
 
-
-def consul_client(loop, config=None):
-    if not config:
-        config = {}
-    host = config.get('CONSUL_HOST', 'localhost')
-    port = int(config.get('CONSUL_PORT', '8500'))
-    token = config.get('CONSUL_TOKEN', None)
-    scheme = config.get('CONSUL_SCHEME', 'http')
-    consistency = config.get('CONSUL_CONSISTENCY', 'default')
-    dc = config.get('CONSUL_DC', None)
-    verify = config.get('CONSUL_VERIFY', True)
-    client = MicroConsul(host=host, port=port, token=token, scheme=scheme,
-                         consistency=consistency, dc=dc, verify=verify,
-                         loop=loop)
-
-    return client
-
-
-def unwrap_kv(data):
-    if data is not None and 'Value' in data:
-        return data['Value'].decode('utf-8')
-    else:
-        return None
-
-
-def unwrap_service(data):
-    return data
-
-
-def unwrap_health(data):
-    ret = {'passing': {},
-           'failing': {}}
-    if data and len(data) > 0:
-        services = list(data[1])
-        for node in services:
-            service = node['Service'].copy()
-            checks = node['Checks']
-            is_alive = True
-            name = 'service:' + service['ID']
-            for check in checks:
-                if check['Status'] != 'passing':
-                    is_alive = False
-            if is_alive:
-                ret['passing'][name] = service
-            else:
-                ret['failing'][name] = service
-    return ret
+logger = logging.getLogger(__name__)
 
 
 class MicroConsul(MicroRegistry):
-    def __init__(
-            self,
-            host='127.0.0.1',
-            port=8500,
-            token=None,
-            scheme='http',
-            consistency='default',
-            dc=None,
-            verify=True,
-            loop=None):
+    def __init__(self):
         super(MicroConsul, self).__init__()
-
-        self._registry = Consul(host, port, token, scheme,
-                                consistency, dc, verify, loop=loop)
-        self.agent = self._registry.agent
-        self.catalog = self._registry.catalog
-        self.health = self._registry.health
-        self.kv = self._registry.kv
-
-        self._loop = loop
-        self.host = host
-        self.port = port
-        self.verify = verify
         self.binds = {}
         self.health_tasks = {}
         self.run_tick = 3
         self.is_connected = False
+        self._loop = None
+        self._registry = None
+
+    def register_app(self, app):
+        self._loop = app.loop
+        self.config = app.config['DISCOVERY']
+        self.host = self.config.get('HOST', 'localhost')
+        self.port = int(self.config.get('PORT', '8500'))
+        self.token = self.config.get('TOKEN', None)
+        self.scheme = self.config.get('SCHEME', 'http')
+        self.consistency = self.config.get('CONSISTENCY', 'default')
+        self.dc = self.config.get('DC', None)
+        self.verify = self.config.get('VERIFY', True)
 
     def run_forever(self):
         while True:
@@ -91,8 +39,8 @@ class MicroConsul(MicroRegistry):
                     self.is_connected = agent_data['Member']['Status']
                     self.is_connected = True
                     self._bind_all()
-                except Exception as ex:
-                    print(ex)
+                except Exception:
+                    logger.error('failed to connect to agent')
                     self.is_connected = False
             yield from asyncio.sleep(self.run_tick)
 
@@ -100,18 +48,32 @@ class MicroConsul(MicroRegistry):
         if self.is_connected:
             for key, bind in self.binds.items():
                 if bind.state in [0, -1]:
+                    logger.info('binding ' + bind.name)
                     self._loop.create_task(bind.run())
 
+    def _connect(self):
+        self._registry = Consul(self.host, self.port, self.token, self.scheme,
+                                self.consistency, self.dc, self.verify,
+                                loop=self._loop)
+        self.agent = self._registry.agent
+        self.catalog = self._registry.catalog
+        self.health = self._registry.health
+        self.kv = self._registry.kv
+
     def run(self):
+        self._connect()
+        logger.info('Consul - Initializing discovery listeners')
+
         def node_change(data):
-            # print("node:", data)
+            logger.info("node:" + str(data))
             pass
 
-        self.bind_listener('node', 'default', node_change)
+        self.bind_listener('node', 'node', node_change)
         self._loop.create_task(self.run_forever())
 
     def bind_listener(self, bind_type, name, func, **kwargs):
         bind = None
+        single = kwargs.pop('singleton', False)
         if bind_type == 'kv':
             bind = ConsulKVBind(self, name, func, **kwargs)
         if bind_type == 'service':
@@ -122,15 +84,21 @@ class MicroConsul(MicroRegistry):
             bind = ConsulNodeBind(self, name, func, **kwargs)
         if isinstance(bind, ConsulBind):
             if bind.key in self.binds.keys():
-                print("warning: bind key already registered", bind.key)
-                bind = self.binds[bind.key]
-                bind.callbacks.append(func)
-                if 'data' in kwargs:
-                    bind.data.append(kwargs['data'])
+                if not single:
+                    bind = self.binds[bind.key]
+                    bind.callbacks.append(func)
+                    logger.warning("binding count for " + bind.key + ':',
+                                   len(bind.callbacks))
+                    if 'data' in kwargs:
+                        bind.data.append(kwargs['data'])
+                else:
+                    logger.warning('discovery warning:not binding '
+                                   'additional callbacks for singleton:' +
+                                   name)
             else:
                 self.binds[bind.key] = bind
         else:
-            print("bind type not recognized: ", bind_type)
+            logger.warning("bind type not recognized: " + bind_type)
         return bind
 
     def listen(self, name, listen_type="kv", **kwargs):
@@ -157,27 +125,31 @@ class MicroConsul(MicroRegistry):
 
     @asyncio.coroutine
     def register(self, name, register_type='kv', **options):
-        if 'kv' == register_type:
-            value = options.pop('value', '')
-            yield from self.kv.put(name, value, **options)
-        if 'service' == register_type:
-            service_id = options.pop('service_id', name)
-            check_ttl = options.pop('check_ttl', None)
-            if check_ttl:
-                options['check'] = Check.ttl(check_ttl)
-            ttl = None
-            if 'ttl_ping' in options:
-                ttl = options.pop('ttl_ping')
-            yield from self.agent.service.register(name, service_id=service_id,
-                                                   **options)
-            if ttl:
-                self.health_tasks[name] = self._loop.create_task(
-                    self.health_ttl_ping(service_id, ttl))
-        return True
+        try:
+            if 'kv' == register_type:
+                value = options.pop('value', '')
+                yield from self.kv.put(name, value, **options)
+            if 'service' == register_type:
+                service_id = options.pop('service_id', name)
+                check_ttl = options.pop('check_ttl', None)
+                if check_ttl:
+                    options['check'] = Check.ttl(check_ttl)
+                ttl = None
+                if 'ttl_ping' in options:
+                    ttl = options.pop('ttl_ping')
+                yield from self.agent.service.register(name, service_id=service_id,
+                                                       **options)
+                if ttl:
+                    self.health_tasks[name] = self._loop.create_task(
+                        self._health_ttl_ping(service_id, ttl))
+            return True
+        except Exception:
+            logger.critical('failed to register with consul')
+            return False
 
     @asyncio.coroutine
     def deregister(self, key, register_type='kv', **options):
-        print('deregistering', register_type, key)
+        logger.info('deregistering' + register_type + ' ' + key)
         if 'kv' == register_type:
             yield from self.kv.delete(key)
         if 'service' == register_type:
@@ -185,21 +157,21 @@ class MicroConsul(MicroRegistry):
             if key in self.health_tasks:
                 self.health_tasks[key].cancel()
                 del self.health_tasks[key]
-                print('removed health task', key)
+                logger.info('removed health task ' + key)
 
     @asyncio.coroutine
-    def health_ttl_ping(self, service_id, ttl):
+    def _health_ttl_ping(self, service_id, ttl):
         check_id = 'service:' + service_id
         alive = True
         while alive:
             try:
                 data = \
                     yield from self.agent.check.ttl_pass(check_id)
-                print('health check returned with ', data)
+                logger.info('health check returned with ' + str(data))
                 yield from asyncio.sleep(ttl)
             except Exception:
                 alive = False
-        print('health ttl ', service_id, 'stopped')
+        logger.info('health ttl ' + service_id + 'stopped')
 
 
 class ConsulBind(object):
@@ -259,8 +231,11 @@ class ConsulKVBind(ConsulBind):
                     for callback in self.callbacks:
                         callback((index, data))
                 self.index = index
+            except asyncio.CancelledError:
+                logger.warning('Value bind cancelled for ' + self.name)
             except Exception:
                 self.state = 0
+                self.index = None
 
 
 class ConsulServiceBind(ConsulBind):
@@ -268,8 +243,9 @@ class ConsulServiceBind(ConsulBind):
 
     def run(self):
         self.state = 1
-        while self.state == 1:
-            try:
+        try:
+            while self.state == 1:
+
                 index, data = yield from self.client.catalog.service(
                     self.name,
                     index=self.index,
@@ -279,8 +255,13 @@ class ConsulServiceBind(ConsulBind):
                     for callback in self.callbacks:
                         callback((index, data))
                 self.index = index
-            except Exception:
-                self.state = 0
+        except asyncio.CancelledError:
+            logger.warning('service bind cancelled for ' + self.name)
+        except Exception:
+            logger.error('service bind failed', exc_info=True)
+        finally:
+            self.state = 0
+            self.index = None
 
 
 class ConsulServiceHealthBind(ConsulBind):
@@ -288,22 +269,30 @@ class ConsulServiceHealthBind(ConsulBind):
 
     def run(self):
         self.state = 1
-        while self.state == 1:
-            try:
-                index, data = yield from self.client.health.service(
+        try:
+            while self.state == 1:
+                response = yield from self.client.health.service(
                     self.name,
                     index=self.index,
                     **self.params)
-                if self.cache != data:
-                    self.cache = data
-                    for callback in self.callbacks:
-                        response = callback((index, data))
-                        if isinstance(response, types.GeneratorType):
-                            yield from response
-                self.index = index
-            except Exception as e:
-                print(e)
-                self.state = 0
+                logger.debug('\n' + '-'*20 + '\nhealth data:\n' +
+                             str(response) + '\n' + '-'*20)
+                if response is not None:
+                    index, data = response
+                    if self.cache != data:
+                        self.cache = data
+                        for callback in self.callbacks:
+                            response = callback((index, data))
+                            if isinstance(response, types.GeneratorType):
+                                yield from response
+                    self.index = index
+        except asyncio.CancelledError:
+            logger.warning('health bind cancelled for ' + self.name)
+        except Exception:
+            logger.error('service health bind failed', exc_info=True)
+        finally:
+            self.state = 0
+            self.index = None
 
 
 class ConsulNodeBind(ConsulBind):
@@ -314,10 +303,9 @@ class ConsulNodeBind(ConsulBind):
         return data['Member']['Name']
 
     def run(self):
-
         self.state = 1
-        while self.state == 1:
-            try:
+        try:
+            while self.state == 1:
                 if self.name == 'default':
                     self.name = yield from self.load_default_agent_name()
                 index, data = yield from self.client.catalog.node(
@@ -329,7 +317,43 @@ class ConsulNodeBind(ConsulBind):
                     for callback in self.callbacks:
                         callback((index, data))
                 self.index = index
-            except Exception as e:
-                print(e)
-                self.client.is_connected = False
-                self.state = 0
+        except asyncio.CancelledError:
+            logger.warning('node bind cancelled for ' + self.name)
+        except Exception:
+            # logger.error('node bind failed', exc_info=True)
+            logger.error('node bind failed')
+        finally:
+            self.client.is_connected = False
+            self.state = 0
+            self.index = None
+
+
+def unwrap_kv(data):
+    if data is not None and 'Value' in data:
+        return data['Value'].decode('utf-8')
+    else:
+        return None
+
+
+def unwrap_service(data):
+    return data
+
+
+def unwrap_health(data):
+    ret = {'passing': {},
+           'failing': {}}
+    if data and len(data) > 0:
+        services = list(data[1])
+        for node in services:
+            service = node['Service'].copy()
+            checks = node['Checks']
+            is_alive = True
+            name = 'service:' + service['ID']
+            for check in checks:
+                if check['Status'] != 'passing':
+                    is_alive = False
+            if is_alive:
+                ret['passing'][name] = service
+            else:
+                ret['failing'][name] = service
+    return ret

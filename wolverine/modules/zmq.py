@@ -1,11 +1,15 @@
 import asyncio
 from asyncio.futures import InvalidStateError
+import logging
 from uuid import uuid1
 import aiozmq
+import msgpack
 import types
 import zmq
-from wolverine.modules import MicroModule
-from wolverine.modules.zhelpers import event_description
+from . import MicroModule
+from .zhelpers import event_description
+
+logger = logging.getLogger(__name__)
 
 
 class ZMQMicroModule(MicroModule):
@@ -18,23 +22,24 @@ class ZMQMicroModule(MicroModule):
         super(ZMQMicroModule, self).__init__()
         # self.streams = {}
 
-    def run(self):
-        print('running module', self.name)
-
     @asyncio.coroutine
     def exit(self):
-        print('closing module', self.name)
+        logger.info('closing module ' + self.name)
         for key in self.router.clients.keys():
-            yield from self.app.registry.deregister(key,
-                                                    register_type='service')
+            try:
+                yield from \
+                    self.app.registry.deregister(key, register_type='service')
+            except Exception:
+                logger.error('failed to deregister client' + key,
+                             exc_info=True)
         self.router.exit()
 
     def _connect_client(self, name, func, **options):
         port = options.pop('port', '9210')
+        async = options.pop('async', False)
         address = options.pop('address', 'tcp://127.0.0.1')
         uri = address + ':' + str(port)
-        print("-" * 20)
-        print('client connect for service:', name)
+        logger.info('client connect for service: ' + name)
         service_id = str(uuid1())[:7]
         service_name = name + ':' + service_id
         try:
@@ -47,8 +52,9 @@ class ZMQMicroModule(MicroModule):
             yield from client.transport.bind(uri)
             self.router.add_client(client, service_name)
         except Exception as ex:
-            print('failed to bind zqm socket for dealer', service_name)
-            print(ex)
+            logger.error('failed to bind zqm socket for dealer ' +
+                         service_name,
+                         exc_info=True)
             return
 
         service_opts = {
@@ -64,24 +70,37 @@ class ZMQMicroModule(MicroModule):
                                                    register_type='service',
                                                    **service_opts)
         if up:
-            print('service ping registered with consul')
-            # health = yield from self.app.registry.agent.checks()
-            # print(health)
+            logger.info('service ' + name +
+                        ' registered with consul with id ' +
+                        service_name)
         else:
-            print('failed to register with consul... ')
-            print('shutting down zqm dealer', name)
+            logger.error('failed to register client ' + service_name +
+                         ' with consul... ')
+            logger.error('shutting down zqm dealer ' + name)
             client.close()
             return
+        if async:
+            self.app.loop.create_task(self._connect_client_handler(client))
         try:
             response = func()
             if isinstance(response, types.GeneratorType):
                 yield from response
         except aiozmq.ZmqStreamClosed:
-            print('stream closed')
-        except Exception as e:
-            print(e)
-            print('client closing')
-            # client.close()
+            logger.info('stream closed')
+        except Exception:
+            logger.error('failed in client callback', exc_info=True)
+            logger.error('client closing')
+            client.close()
+
+    def _connect_client_handler(self, client):
+        while True:
+            response = yield from client.read()
+            correlation_id = response[0].decode('utf-8')
+            if correlation_id in self.router.async_req_queue:
+                future = self.router.async_req_queue[correlation_id]
+                if not future.cancelled():
+                    data = msgpack.unpackb(response[-1], encoding='utf-8')
+                    future.set_result(data)
 
     @asyncio.coroutine
     def _connect_service(self, name, func, **options):
@@ -90,11 +109,10 @@ class ZMQMicroModule(MicroModule):
         bind_type = options.pop('bind_type', zmq.ROUTER)
         listen_type = options.pop('listen_type', 'kv')
 
-        @self.app.registry.listen(name, listen_type=listen_type, **options)
+        @self.app.registry.listen(name, listen_type=listen_type,
+                                  singleton=True, **options)
         def discover_service(data):
-            print("-" * 20)
-            print('service:', name)
-            print("route:", route)
+
             try:
                 data = self.app.registry.unwrap(data, listen_type)
                 if data and 'passing' in data:
@@ -102,7 +120,17 @@ class ZMQMicroModule(MicroModule):
                                set(self.router.servers.keys()))
                     removed = list(set(self.router.servers.keys()) -
                                    set(data['passing'].keys()))
+                    logger.info('\n' +
+                                '-' * 20 +
+                                '\n     discovery\n' +
+                                'service:' + name + ', route:' + route +
+                                '\nnew: ' + str(len(new)) +
+                                ' removed: ' + str(len(removed)) +
+                                '\n' +
+                                '-' * 20)
+
                     for key in new:
+                        logger.info('registering new handler for ' + key)
                         s = data['passing'][key]
                         address = s.pop('Address', '')
                         port = s.pop('Port', '')
@@ -111,16 +139,17 @@ class ZMQMicroModule(MicroModule):
                             self.zmq_service(key, uri, bind_type)
                         self.router.add_server(key, service)
                     for key in removed:
+                        logger.info('removed handler for ' + key)
                         self.router.remove_server(key)
             except Exception as e:
-                print('service binding error:', e)
+                logger.error('service binding error:', exc_info=True)
 
     @asyncio.coroutine
     def zmq_service(self, service_name, address, bind_type):
         server = yield from aiozmq.create_zmq_stream(bind_type)
         yield from server.transport.enable_monitor()
         yield from server.transport.connect(address)
-        print('zmq stream ', bind_type, 'registered at', address)
+        logger.info('zmq stream ' + service_name + ' registered at ' + address)
         self.app.loop.create_task(self.monitor_stream(service_name, server))
 
         def run():
@@ -128,26 +157,27 @@ class ZMQMicroModule(MicroModule):
             while alive:
                 try:
                     work = yield from server.read()
-                    yield from self.handle_data(work, service_name)
+                    self.app.loop.create_task(
+                        self.handle_data(work, service_name))
                 except aiozmq.ZmqStreamClosed:
-                    print("zmq stream", bind_type, 'closed')
+                    logger.info('zmq stream ' + service_name + ' closed')
                     alive = False
-                except Exception as ex:
-                    print(service_name, 'work halted for:', ex)
+                except Exception:
+                    logger.error(service_name + ' work halted', exc_info=True)
 
         self.app.loop.create_task(run())
         return server
 
     @asyncio.coroutine
     def monitor_stream(self, name, stream):
-        print('monitoring stream', name)
+        logger.debug('monitoring stream' + name)
         try:
             while True:
                 event = yield from stream.read_event()
                 event = event_description(event.event)
-                print('stream', name, 'event:', event)
+                logger.debug('stream ' + name + ' event:' + event)
         except aiozmq.ZmqStreamClosed:
-            print('monitoring closed for stream ', name)
+            logger.debug('monitoring closed for stream ' + name)
 
     @asyncio.coroutine
     def handle_data(self, d, service_name):
@@ -171,10 +201,15 @@ class ZMQMicroModule(MicroModule):
                     self.router.reply(error, service_name)
                     state = -2
         except aiozmq.ZmqStreamClosed:
-            print('stream closed')
+            logger.info('stream closed')
         except InvalidStateError:
-            print('invalid state')
-        except Exception as e:
-            print(e)
+            logger.info('invalid state')
+        except Exception:
+            logger.error('failure while handling data',
+                         extra={'name': service_name,
+                                'data': d},
+                         exc_info=True)
         finally:
-            print('state: ', state)
+            if state != 2:
+                logger.error('service handler reached invalid state',
+                             extra={'state': 2})
