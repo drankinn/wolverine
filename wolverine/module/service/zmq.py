@@ -34,12 +34,15 @@ class ZMQMicroService(MicroService):
 
     def connect_client(self, name, func, **options):
         port = options.pop('port', '9210')
+        tags = options.pop('tags', [])
         async = options.pop('async', False)
         address = options.pop('address', 'tcp://127.0.0.1')
         uri = address + ':' + str(port)
         logger.info('client connect for service: ' + name)
-        service_id = str(uuid1())[:7]
+        service_id = options.pop('service_id', str(uuid1())[:7])
         service_name = name + ':' + service_id
+        check_ttl = options.pop('ttl', 12)
+        ttl_ping = options.pop('ttl_ping', 10)
         try:
             client = yield from aiozmq.create_zmq_stream(
                 zmq.DEALER)
@@ -59,9 +62,9 @@ class ZMQMicroService(MicroService):
             'service_id': service_name,
             'address': address,
             'port': int(port),
-            'tags': ['DEALER_BIND'],
-            'check_ttl': '12s',
-            'ttl_ping': 10
+            'tags': tags,
+            'check_ttl': str(check_ttl) + 's',
+            'ttl_ping': int(ttl_ping)
 
         }
         up = yield from self.app.registry.register(name,
