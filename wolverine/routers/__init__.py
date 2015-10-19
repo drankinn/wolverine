@@ -1,9 +1,12 @@
 import asyncio
+from collections import OrderedDict
 import logging
 import uuid
 import msgpack
 import re
+import types
 from wolverine.module import MicroModule
+from wolverine.module.controller.zhelpers import unpackb, packb, dump
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +16,22 @@ class MicroRouter(MicroModule):
     def __init__(self):
         super(MicroRouter, self).__init__()
         self.name = 'router'
-        self.service_handlers = {}
+        self.service_handlers = OrderedDict()
         self.client_handlers = {}
         self.clients = {}
         self.servers = {}
         self.async_req_queue = {}
+
+    def run(self):
+        pass
+        # self.sort_handlers()
+
+    def sort_handlers(self):
+        """sort the service handlers by key length from shortest to longest"""
+        d = self.service_handlers.copy()
+        sorted_handlers = OrderedDict(
+            sorted(d.items(), key=lambda t: len(t[0])))
+        self.service_handlers = sorted_handlers
 
     @asyncio.coroutine
     def stop(self):
@@ -95,6 +109,8 @@ class MicroRouter(MicroModule):
     def handle_service(self, data):
         route = data[-2]
         logger.info('handling data for route ' + route.decode('utf-8'))
+        if logger.getEffectiveLevel() == logging.DEBUG:
+            dump(data)
         return self._handle_service(route, data)
 
     def _handle_service(self, route, data):
@@ -105,17 +121,25 @@ class MicroRouter(MicroModule):
         for key, handlers in self.service_handlers.items():
             pattern = re.compile(key)
             if pattern.match(route):
+                req = unpackb(data[-1])
                 found = True
                 logger.info('handler: ' + key)
                 for func in handlers:
                     try:
-                        result['data'].append(func(data))
+                        response = func(req)
+                        if isinstance(response, types.GeneratorType):
+                            response = yield from response
+                        if response is not None:
+                            result['data'].append(response)
                     except Exception as ex:
+                        logger.error('failed in data handling')
                         result['errors'].append(ex)
                 break
         if not found:
             logger.info('no matching route for ' + route)
-        return result
+
+        packet = data[:-1] + [packb(result)]
+        return packet
 
     def reply(self, data, name):
         if name in self.servers.keys():

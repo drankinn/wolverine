@@ -179,30 +179,21 @@ class ZMQMicroController(MicroController):
     def handle_service_data(self, d, service_name):
         state = 0
         try:
-            responses = self.app.router.handle_service(d)
             state = 1
-            for response in responses['data']:
-                if isinstance(response, types.GeneratorType):
-                    response = yield from response
-                if response:
-                    ret = self.app.router.reply(response, service_name)
-                    if isinstance(ret, types.GeneratorType):
-                        yield from ret
-                    state = 2
-            for error in responses['errors']:
-                if isinstance(error, types.GeneratorType):
-                    error = yield from error
-                if error:
-                    state = -1
-                    self.app.router.reply(error, service_name)
-                    state = -2
+            response = self.app.router.handle_service(d)
+            if isinstance(response, types.GeneratorType):
+                response = yield from response
+            ret = self.app.router.reply(response, service_name)
+            if isinstance(ret, types.GeneratorType):
+                yield from ret
+            state = 2
         except aiozmq.ZmqStreamClosed:
             logger.info('stream closed')
         except InvalidStateError:
             logger.info('invalid state')
         except Exception:
             logger.error('failure while handling data',
-                         extra={'name': service_name,
+                         extra={'service_name': service_name,
                                 'data': d},
                          exc_info=True)
         finally:

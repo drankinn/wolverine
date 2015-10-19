@@ -36,6 +36,30 @@ def dump(msg_or_socket):
     logger.debug(out)
 
 
+def packb(data):
+    try:
+        return msgpack.packb(data, use_bin_type=True)
+    except Exception:
+        logger.error('error packing data', extra={'data': data}, exc_info=True)
+
+
+
+
+def unpack(data):
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        return unpackb(data)
+
+
+def unpackb(data):
+    try:
+        return str(msgpack.unpackb(data))
+    except Exception:
+        logger.warning('couldn\'t decode data' + str(data))
+        return data
+
+
 def set_id(zsocket):
     """Set simple random printable identity on socket"""
     identity = u"%04x-%04x" % (randint(0, 0x10000), randint(0, 0x10000))

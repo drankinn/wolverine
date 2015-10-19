@@ -22,6 +22,8 @@ class MicroController(MicroModule):
 
         for handler in self.handlers:
             self.register_handler(handler)
+        self.app.router.sort_handlers()
+
 
     def register_handler(self, handler):
         name, handler_type, func, options = handler
