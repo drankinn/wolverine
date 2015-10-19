@@ -7,6 +7,7 @@ import re
 import types
 from wolverine.module import MicroModule
 from wolverine.module.controller.zhelpers import unpackb, packb, dump
+from wolverine.module.service import ServiceMessage
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,10 @@ class MicroRouter(MicroModule):
                         response = func(req)
                         if isinstance(response, types.GeneratorType):
                             response = yield from response
+                        if isinstance(response, ServiceMessage):
+                            if response.has_error():
+                                result['errors'].append(response.errors)
+                            response = response.data
                         if response is not None:
                             result['data'].append(response)
                     except Exception as ex:

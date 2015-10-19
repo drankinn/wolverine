@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from wolverine.module.service import ServiceMessage
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,9 @@ class PingPongService(object):
     def ping(self, data):
         logger.debug('data: ' + str(data))
         yield from asyncio.sleep(self.delay)
-        return data
+        response = ServiceMessage()
+        response.data = data
+        return response
 
     def ping2(self, data):
         logger.debug('--ping1 handler--')
