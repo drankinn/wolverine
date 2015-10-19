@@ -161,7 +161,7 @@ class MicroConsul(MicroRegistry):
 
     @asyncio.coroutine
     def deregister(self, key, register_type='kv', **options):
-        logger.info('deregistering' + register_type + ' ' + key)
+        logger.info('deregistering ' + register_type + ' ' + key)
         if 'kv' == register_type:
             yield from self.kv.delete(key)
         if 'service' == register_type:
@@ -183,7 +183,7 @@ class MicroConsul(MicroRegistry):
                 yield from asyncio.sleep(ttl)
             except Exception:
                 alive = False
-        logger.info('health ttl ' + service_id + 'stopped')
+        logger.info('health ttl ' + service_id + ' stopped')
 
 
 class ConsulBind(object):

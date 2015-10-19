@@ -2,8 +2,9 @@ import asyncio
 import logging
 import os
 import functools
-from wolverine.module.service import zhelpers
-from wolverine.module.service.zmq import ZMQMicroService
+from examples.ping_pong.service import PingPongService
+from wolverine.module.controller import zhelpers
+from wolverine.module.controller.zmq import ZMQMicroController
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ def ping_pong(mode, options):
     config_file = os.path.join(__path__[0], 'settings.ini')
     app = MicroApp(loop=loop, config_file=config_file)
 
-    if 'client' == mode:
+    if 'ping' == mode:
         app.register_module(
             ping_client(int(options.port),
                         delay=int(options.delay),
@@ -28,11 +29,22 @@ def ping_pong(mode, options):
                         routing=options.routing,
                         async=options.async))
 
-    if 'server' == mode:
+    if 'pong' == mode:
         app.register_module(
-            pong_service(delay=int(options.delay),
-                         routing=options.routing))
+            pong_controller(delay=int(options.delay),
+                            routing=options.routing))
+    if 'pong2' == mode:
+        app.register_module(
+            pong_controller(delay=int(options.delay),
+                            routing=options.routing))
     app.run()
+
+
+def pong_controller(**options):
+    service = PingPongService(**options)
+    module = ZMQMicroController()
+    module.register_service(service)
+    return module
 
 
 def pong_service(**options):
@@ -40,7 +52,7 @@ def pong_service(**options):
     delay = options.pop('delay', 1)
     routing = options.pop('routing', False)
 
-    module = ZMQMicroService()
+    module = ZMQMicroController()
 
     if not routing:
         @module.handler('ping', listen_type='health', handler_type='server')
@@ -75,23 +87,28 @@ def ping_client(port, **options):
     times = options.pop('times', -1)
     routing = options.pop('routing', False)
     async = options.pop('async', False)
-    module = ZMQMicroService()
-
+    module = ZMQMicroController()
     ping_opts = {
         'address': 'tcp://127.0.0.1',
         'port': port,
     }
 
-    def get_result(count, future):
+    def get_result(future):
         data = future.result()
         logger.info('response:' + str(data))
-        logger.info('response count:' + str(count))
-        if data['message'] == times == count:
-            module.app.loop.create_task(module.app.stop('SIGTERM'))
+
+    def finish(results):
+        done, pending = yield from results
+        logger.error('DONE: ' + str(len(done)))
+        logger.error('PENDING:' + str(len(pending)))
+        for fail in pending:
+            logger.error('task never finished... ' + fail.get_result())
+        module.app.loop.create_task(module.app.stop('SIGTERM'))
 
     @module.client('ping', async=async, **ping_opts)
     def ping():
         send_count = 1
+        tasks = []
         try:
             while send_count <= times or times <= 0:
                 yield from asyncio.sleep(delay)
@@ -99,33 +116,36 @@ def ping_client(port, **options):
                 logger.info('sending ' + str(data) + ' to ping/ping1')
                 if async:
                     future = asyncio.Future()
-                    yield from module.router.send(data, 'ping/ping1',
-                                                  future=future)
-                    future.add_done_callback(
-                        functools.partial(get_result, send_count))
+                    tasks.append(future)
+                    yield from module.app.router.send(data, 'ping/ping1',
+                                                      future=future)
+                    future.add_done_callback(get_result)
                     if routing:
                         send_count += 1
                         data2 = {'message': send_count}
                         logger.info('sending ' + str(data2) + 'to ping/ping2')
                         future2 = asyncio.Future()
-                        yield from module.router.send(data2, 'ping/ping2',
-                                                      future=future2)
-                        future2.add_done_callback(
-                            functools.partial(get_result, send_count))
+                        tasks.append(future2)
+                        yield from module.app.router.send(data2, 'ping/ping2',
+                                                          future=future2)
+                        future2.add_done_callback(get_result)
 
                 else:
-                    response = yield from module.router.send(data,
+                    response = yield from module.app.router.send(data,
                                                              'ping/ping1')
                     logger.info('response:' + str(response))
                     if routing and send_count < times:
                         send_count += 1
                         data2 = {'message': send_count}
                         logger.info('sending ' + str(data2) + 'to ping/ping2')
-                        response = yield from module.router.send(data2,
+                        response = yield from module.app.router.send(data2,
                                                                  'ping/ping2')
                         logger.info('response:' + str(response))
                 send_count += 1
-            if not async:
+            if async:
+                module.app.loop.create_task(
+                    finish(asyncio.wait(tasks, timeout=10)))
+            else:
                 module.app.loop.create_task(module.app.stop('SIGTERM'))
         except asyncio.CancelledError:
             logger.debug('ping client killed')

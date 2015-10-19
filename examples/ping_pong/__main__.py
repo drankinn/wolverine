@@ -35,10 +35,8 @@ def main():
     logging.basicConfig(level=log_level,
                         format=LOG_FORMAT)
 
-    if 'ping' in args:
-        ping_pong('client', options)
-    else:
-        ping_pong('server', options)
+    ping_pong(args[0], options)
+
 
 
 if __name__ == "__main__":
