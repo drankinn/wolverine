@@ -23,16 +23,23 @@ class MicroRouter(MicroModule):
     def stop(self):
         for service_name in list(self.servers.keys()):
             self.remove_server(service_name)
-        for client_name in list(self.clients.keys()):
-            self.remove_client(client_name)
+        for key in list(self.clients.keys()):
+            yield from self.remove_client(key)
         self.service_handlers = {}
         logger.info("router exited")
 
-    def add_client(self, client, name):
-        if name not in self.clients.keys():
-            self.clients[name] = client
+    @asyncio.coroutine
+    def add_client(self, client, name, **options):
+        service_id = options.get('service_id', name)
+        if service_id not in self.clients.keys():
+            self.clients[service_id] = client
+            up = yield from self.app.registry.register(name,
+                                                       register_type='service',
+                                                       **options)
+            return up
         else:
             logger.warning('not overriding a client with route ' + name)
+            return True
 
     def remove_client(self, name):
         if name in self.clients.keys():
@@ -40,6 +47,12 @@ class MicroRouter(MicroModule):
                 self.clients[name].close()
             except Exception:
                 logger.error('error closing client ' + name, exc_info=True)
+            try:
+                yield from \
+                    self.app.registry.deregister(name, register_type='service')
+            except Exception:
+                logger.error('failed to deregister client' + name,
+                             exc_info=True)
             del self.clients[name]
 
     def add_server(self, name, service):
@@ -93,13 +106,15 @@ class MicroRouter(MicroModule):
             pattern = re.compile(key)
             if pattern.match(route):
                 found = True
+                logger.info('handler: ' + key)
                 for func in handlers:
                     try:
                         result['data'].append(func(data))
                     except Exception as ex:
                         result['errors'].append(ex)
+                break
         if not found:
-            logger.info('no matching route for' + route)
+            logger.info('no matching route for ' + route)
         return result
 
     def reply(self, data, name):

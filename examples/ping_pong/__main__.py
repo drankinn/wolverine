@@ -1,9 +1,10 @@
 import logging
 from optparse import OptionParser
-from examples.ping_pong.module import ping_pong
+from examples.ping_pong import ping_pong
 
 LOG_FORMAT = "%(asctime)s %(levelname)s" \
              " %(name)s:%(lineno)s %(message)s"
+
 
 def main():
 
@@ -34,10 +35,8 @@ def main():
     logging.basicConfig(level=log_level,
                         format=LOG_FORMAT)
 
-    if 'ping' in args:
-        ping_pong('client', options)
-    if 'pong' in args:
-        ping_pong('server', options)
+    ping_pong(args[0], options)
+
 
 
 if __name__ == "__main__":

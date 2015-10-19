@@ -5,6 +5,7 @@ import importlib
 import os
 import signal
 import functools
+import types
 from .discovery import MicroRegistry
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,15 @@ class MicroApp(object):
         print('-'*20)
         print('')
 
-        self._load_registry()
-        self._load_router()
+        def _run():
+            self._load_registry()
+            self._load_router()
 
-        for key, module in self.modules.items():
-            module.run()
+            for key, module in self.modules.items():
+                ret = module.run()
+                if isinstance(ret, types.GeneratorType):
+                    yield from ret
+        self.loop.create_task(_run())
         self.loop.run_forever()
         logger.info('closing loop')
         try:
