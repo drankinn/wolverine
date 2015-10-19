@@ -132,8 +132,9 @@ class MicroRouter(MicroModule):
                         if response is not None:
                             result['data'].append(response)
                     except Exception as ex:
+                        logger.error('failed in handling data: ', exc_info=True)
                         logger.error('failed in data handling')
-                        result['errors'].append(ex)
+                        result['errors'].append("{0}".format(ex))
                 break
         if not found:
             logger.info('no matching route for ' + route)

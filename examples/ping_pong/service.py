@@ -14,18 +14,18 @@ class PingPongService(object):
 
     def ping1(self, data):
         logger.debug('--ping1 handler--')
-        logger.debug('data: ' + data)
+        logger.debug('data: ' + str(data))
         yield from asyncio.sleep(self.delay)
         return data
 
     def ping(self, data):
-        logger.debug('data: ' + data)
+        logger.debug('data: ' + str(data))
         yield from asyncio.sleep(self.delay)
         return data
 
     def ping2(self, data):
         logger.debug('--ping1 handler--')
-        logger.debug('data: ' + data)
+        logger.debug('data: ' + str(data))
         yield from asyncio.sleep(self.delay)
         return data
 

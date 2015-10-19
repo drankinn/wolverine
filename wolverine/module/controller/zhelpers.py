@@ -54,7 +54,7 @@ def unpack(data):
 
 def unpackb(data):
     try:
-        return str(msgpack.unpackb(data))
+        return msgpack.unpackb(data, encoding='utf-8')
     except Exception:
         logger.warning('couldn\'t decode data' + str(data))
         return data

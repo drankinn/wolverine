@@ -102,7 +102,7 @@ def ping_client(port, **options):
         logger.error('DONE: ' + str(len(done)))
         logger.error('PENDING:' + str(len(pending)))
         for fail in pending:
-            logger.error('task never finished... ' + fail.get_result())
+            logger.error('task never finished... ' + fail.result())
         module.app.loop.create_task(module.app.stop('SIGTERM'))
 
     @module.client('ping', async=async, **ping_opts)
