@@ -56,8 +56,8 @@ class MicroApp(object):
         self.register_module(router)
 
     def run(self):
-        self.name = self.config['APP'].get('NAME', 'Spooky Ash')
         self.config.read(self.config_file)
+        self.name = self.config['APP'].get('NAME', 'Spooky Ash')
         print('-'*20)
         print('   --', self.name, '--')
         print('-'*20)
