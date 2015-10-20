@@ -32,7 +32,7 @@ def ping_pong(mode, options):
 
     if 'pong' == mode:
         app.register_module(
-            pong_controller(delay=int(options.delay),
+            pong_controller(app, delay=int(options.delay),
                             routing=options.routing,
                             version=options.version))
     if 'pong2' == mode:
@@ -128,8 +128,8 @@ def gateway():
     return module
 
 
-def pong_controller(**options):
-    pong_service = PingPongService(**options)
+def pong_controller(app, **options):
+    pong_service = PingPongService(app, **options)
     module = ZMQMicroController()
     module.register_service(pong_service)
     return module

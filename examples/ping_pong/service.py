@@ -7,13 +7,10 @@ logger = logging.getLogger(__name__)
 
 class PingPongService(MicroService):
 
-    def __init__(self, **options):
+    def __init__(self, app, **options):
         self.delay = options.pop('delay', 1)
         self.routing = options.pop('routing', False)
-        version = options.pop('version', '1')
-        super(PingPongService, self).__init__('ping', version=version)
-        self.name = 'ping'
-        self.options = {}
+        super(PingPongService, self).__init__(app, 'ping', **options)
 
     def ping1(self, data):
         logger.debug('--ping1 handler--')

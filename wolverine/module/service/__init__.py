@@ -1,10 +1,11 @@
 
 class MicroService(object):
 
-    def __init__(self, name, version='1'):
+    def __init__(self, app,  name='service', version='1', **options):
+        self.app = app
         self.name = name
         self.version = version
-
+        self.options = options
 
 
 class ServiceMessage(object):
