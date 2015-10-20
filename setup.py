@@ -3,7 +3,7 @@ from setuptools import find_packages
 
 setup(
     name='wolverine',
-    version='0.1.7',
+    version='0.1.8',
     packages=find_packages(),
     url='http://github.com/drankinn/wolverine',
     license='MIT 2.0',

@@ -80,7 +80,7 @@ class MicroConsul(MicroRegistry):
         if self.is_connected:
             for key, bind in self.binds.items():
                 if bind.state in [0, -1]:
-                    logger.info('binding ' + bind.name)
+                    logger.info('binding ' + bind.bind_type + ' ' + bind.name)
                     self._loop.create_task(bind.run())
 
     def bind_listener(self, bind_type, name, func, **kwargs):
@@ -136,10 +136,9 @@ class MicroConsul(MicroRegistry):
             return unwrap_health(data)
 
     @asyncio.coroutine
-    def register(self, name, register_type='kv', **options):
+    def register(self, name, register_type='kv', value=None, **options):
         try:
             if 'kv' == register_type:
-                value = options.pop('value', '')
                 yield from self.kv.put(name, value, **options)
             if 'service' == register_type:
                 service_id = options.pop('service_id', name)
@@ -152,7 +151,7 @@ class MicroConsul(MicroRegistry):
                 yield from self.agent.service.register(name, service_id=service_id,
                                                        **options)
                 if ttl:
-                    self.health_tasks[name] = self._loop.create_task(
+                    self.health_tasks[service_id] = self._loop.create_task(
                         self._health_ttl_ping(service_id, ttl))
             return True
         except Exception:
@@ -232,6 +231,7 @@ class ConsulKVBind(ConsulBind):
 
     def run(self):
         self.state = 1
+        logger.debug('listening to key: ' + self.name)
         while self.state == 1:
             try:
                 index, data = yield from self.client.kv.get(self.name,
@@ -243,6 +243,8 @@ class ConsulKVBind(ConsulBind):
                 self.index = index
             except asyncio.CancelledError:
                 logger.warning('Value bind cancelled for ' + self.name)
+                self.state = 0
+                self.index = None
             except Exception:
                 self.state = 0
                 self.index = None

@@ -166,15 +166,19 @@ class MicroRouter(MicroModule):
         yield from client.drain()
         return future
 
-    def send(self, data, route='.*', **options):
+    def send(self, data, route='.*', version='1', **options):
+        client = None
         future = options.pop('future', None)
         service = route.split('/')[0]
         if len(route.split('/')) < 2:
             route += '/'
-        links = {x.split(':')[0]: x.split(':')[1] for x in self.clients.keys()}
-        if service in links.keys():
-            service_name = service + ':' + links[service]
-            client = self.clients[service_name]
+        for c_client_id, c_client in self.clients.items():
+            c_service, c_service_id = c_client_id.split(':')
+            c_version = c_service_id.split('_')[1]
+            if service == c_service and version == c_version:
+                client = c_client
+                break
+        if client:
             correlation_id = str(uuid.uuid1())[:8]
             b_data = msgpack.packb(data, use_bin_type=True)
             packet = (bytes(correlation_id, encoding='utf-8'),
@@ -187,3 +191,5 @@ class MicroRouter(MicroModule):
                 response = yield from self._send_async(packet, client,
                                                        correlation_id, future)
             return response
+        else:
+            return None

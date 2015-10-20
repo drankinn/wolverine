@@ -14,6 +14,8 @@ def main():
     parser = OptionParser(usage)
     parser.add_option("-p", "--port", dest="port",
                       help="port to bind to", default='9210')
+    parser.add_option("-v", "--version", dest="version",
+                      help="app version", default='1')
     parser.add_option("-d", "--delay", dest="delay",
                       help="simulated workload delay", default="1")
     parser.add_option("-t", "--times", dest="times",

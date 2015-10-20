@@ -1,3 +1,4 @@
+import ast
 import asyncio
 from asyncio.futures import InvalidStateError
 import logging
@@ -7,7 +8,7 @@ import msgpack
 import types
 import zmq
 from . import MicroController
-from .zhelpers import event_description
+from .zhelpers import event_description, unpack
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,38 @@ class ZMQMicroController(MicroController):
             logger.info('closing client read buffer')
 
     @asyncio.coroutine
-    def connect_service(self, name, **options):
+    def connect_data(self, name, func, **options):
+        listen_type = options.pop('listen_type', 'kv')
+
+        @self.app.registry.listen(name, listen_type=listen_type,
+                                  **options)
+        def discover_data(packet):
+            try:
+                index, data_set = packet
+                logger.debug('data set: ' + str(data_set))
+                if data_set is None:
+                    data_set = []
+                params = []
+                for data in data_set:
+                    value = data['Value']
+                    if isinstance(value, bytes):
+                        value = unpack(value)
+                    value = ast.literal_eval(value)
+                    params.append(value)
+                func(params)
+            except Exception:
+                logger.error('kv data handling exception', exc_info=True)
+
+    @asyncio.coroutine
+    def connect_service(self, name, service):
+        try:
+            options = service.options
+        except Exception:
+            options = {}
+        try:
+            options['tag'] = 'version:' + str(service.version)
+        except Exception:
+            options['tag'] = 'version:1'
         bind_type = options.pop('bind_type', zmq.ROUTER)
         listen_type = options.pop('listen_type', 'health')
 
@@ -159,7 +191,8 @@ class ZMQMicroController(MicroController):
                     logger.info('zmq stream ' + service_name + ' closed')
                     alive = False
                 except Exception:
-                    logger.error(service_name + ' work halted', exc_info=True)
+                    pass
+                #   logger.error(service_name + ' work halted', exc_info=True)
 
         self.app.loop.create_task(run())
         return server
