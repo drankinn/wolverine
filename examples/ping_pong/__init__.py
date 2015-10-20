@@ -204,6 +204,7 @@ def ping_client(port, **options):
                     future = asyncio.Future()
                     tasks.append(future)
                     yield from module.app.router.send(data, 'ping/ping1',
+                                                      version=version,
                                                       future=future)
                     future.add_done_callback(get_result)
                     if routing:
@@ -213,12 +214,14 @@ def ping_client(port, **options):
                         future2 = asyncio.Future()
                         tasks.append(future2)
                         yield from module.app.router.send(data2, 'ping/ping2',
+                                                          version=version,
                                                           future=future2)
                         future2.add_done_callback(get_result)
 
                 else:
-                    response = yield from module.app.router.send(data,
-                                                                 'ping/ping1')
+                    response = yield from \
+                        module.app.router.send(data, 'ping/ping1',
+                                               version=version)
                     logger.info('response:' + str(response))
                     if routing and send_count < times:
                         send_count += 1
@@ -226,7 +229,8 @@ def ping_client(port, **options):
                         logger.info('sending ' + str(data2) + 'to ping/ping2')
                         response = yield from \
                             module.app.router.send(data2,
-                                                   'ping/ping2')
+                                                   'ping/ping2',
+                                                   version=version)
                         logger.info('response:' + str(response))
                 send_count += 1
             if async:
