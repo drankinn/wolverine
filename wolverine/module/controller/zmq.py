@@ -28,12 +28,18 @@ class ZMQMicroController(MicroController):
 
     def connect_client(self, name, func, **options):
         port = options.pop('port', '9210')
-        tags = options.pop('tags', [])
+        tags = options.pop('tags', ['version:1'])
+        version = '1'
+        for tag in tags:
+            tag_name = tag.split(':')[0]
+            if tag_name == 'version' and len(tag.split(':')) > 0:
+                version = tag.split(':')[1]
         async = options.pop('async', False)
         address = options.pop('address', 'tcp://127.0.0.1')
         uri = address + ':' + str(port)
         logger.info('client connect for service: ' + name)
-        service_id = options.pop('service_id', str(uuid1())[:7])
+        default_service_id = str(uuid1())[:8] + '_' + version
+        service_id = options.pop('service_id', default_service_id)
         service_name = name + ':' + service_id
         check_ttl = options.pop('ttl', 12)
         ttl_ping = options.pop('ttl_ping', 10)
