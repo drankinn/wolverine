@@ -95,5 +95,5 @@ class MicroApp(object):
         if item in self.modules.keys():
             return self.modules[item]
         else:
-            raise AttributeError('no module' + item + 'in the app')
+            raise AttributeError('no module ' + item + ' in the app')
 
