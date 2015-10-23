@@ -1,12 +1,10 @@
-Wolverine
-==========
+# Wolverine
 A Micro-Service framework built on python 3.5 and asyncio
 
 requirements for using as a package:
 python >= version 3.5
 
-CONFIGURATION
--------------
+#### CONFIGURATION
 when a MicroApp instance is ran, it looks for a settings.ini file in the 
 current directory.  This location can be overridden by passing in a config_file
 option to the class constructor which is the string path to the config file.
@@ -17,7 +15,7 @@ The full app configuration can be accessed with a call to app.config
 A configparser.ConfigParser instance will be returned.
  
 Config files have the format:
- 
+``` 
 [APP]
 NAME = WOLVERINE
 ROUTER = wolverine.routers.MicroRouter
@@ -26,10 +24,9 @@ REGISTRY = wolverine.discovery.MicroRegistry
 [DB]
 HOST = localhost
 PORT = 3306
+```
 
-
-EXAMPLES
----------
+#### EXAMPLES
 
 There is an example Ping Pong demo that you can use to try it.
 

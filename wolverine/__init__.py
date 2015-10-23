@@ -6,6 +6,7 @@ import os
 import signal
 import functools
 import types
+
 from .discovery import MicroRegistry
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,9 @@ class MicroApp(object):
 
     _default_registry = MicroRegistry
 
-    def __init__(self, loop=None, config_file='settings.ini'):
+    def __init__(self, loop=None, config_file='settings.ini', mock=False):
         self.name = ''
+        self.mock = mock
         self.config_file = config_file
         default_settings = os.path.join(__path__[0],
                                         'settings.ini')
@@ -26,15 +28,20 @@ class MicroApp(object):
 
         self.tasks = []
         self.modules = {}
-        self.loop = loop or asyncio.get_event_loop()
+        self.loop = loop
+
+        if not self.mock:
+            self.loop = loop or asyncio.get_event_loop()
 
         def _exit(sig_name):
-            self.loop.create_task(self.stop(sig_name))
+            if not self.mock:
+                self.loop.create_task(self.stop(sig_name))
 
-        for sig in self.SIG_NAMES:
-            self.loop.add_signal_handler(getattr(signal, sig),
-                                         functools.partial(_exit,
-                                                           sig))
+        if not self.mock:
+            for sig in self.SIG_NAMES:
+                self.loop.add_signal_handler(getattr(signal, sig),
+                                             functools.partial(_exit,
+                                                               sig))
 
     def register_module(self, module):
         logger.info("registering module" + module.name)
@@ -56,12 +63,17 @@ class MicroApp(object):
         self.register_module(router)
 
     def run(self):
+        print('')
         self.config.read(self.config_file)
         self.name = self.config['APP'].get('NAME', 'Spooky Ash')
-        print('-'*20)
+        print('-' * 20)
         print('   --', self.name, '--')
-        print('-'*20)
+        print('-' * 20)
         print('')
+
+        if self.mock:
+            for key, module in self.modules.items():
+                ret = module.run()
 
         def _run():
             self._load_registry()
@@ -69,15 +81,20 @@ class MicroApp(object):
 
             for key, module in self.modules.items():
                 ret = module.run()
-                if isinstance(ret, types.GeneratorType):
-                    yield from ret
-        self.loop.create_task(_run())
-        self.loop.run_forever()
-        logger.info('closing loop')
-        try:
-            self.loop.close()
-        except Exception:
-            logger.error('boom', exc_info=True)
+
+                if not self.mock:
+                    if isinstance(ret, types.GeneratorType):
+                        yield from ret
+
+        if not self.mock:
+            self.loop.create_task(_run())
+            self.loop.run_forever()
+            logger.info('closing loop')
+
+            try:
+                self.loop.close()
+            except Exception:
+                logger.error('boom', exc_info=True)
 
     def stop(self, sig_name):
         if sig_name in self.SIG_NAMES:
@@ -95,5 +112,4 @@ class MicroApp(object):
         if item in self.modules.keys():
             return self.modules[item]
         else:
-            raise AttributeError('no module ' + item + ' in the app')
-
+            raise AttributeError('no module named "' + item + '" in the app')
