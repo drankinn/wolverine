@@ -1,1 +1,8 @@
 # Created by .ignore support plugin (hsz.mobi)
+.idea
+build
+dist
+__pycache__
+wolverine.egg-info
+MANIFEST
+*.pyc
