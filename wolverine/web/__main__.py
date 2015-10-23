@@ -1,0 +1,39 @@
+import asyncio
+import logging
+from optparse import OptionParser
+import os
+from wolverine import MicroApp
+from wolverine.gateway import WebGatewayModule
+
+
+LOG_FORMAT = "%(asctime)s %(levelname)s" \
+             " %(name)s:%(lineno)s %(message)s"
+
+
+def web():
+
+    log_level = logging.INFO
+    usage = "usage: %prog [options] arg"
+    parser = OptionParser(usage)
+    parser.add_option("-l", "--log-level", dest="log_level",
+                      help="log level one of "
+                           "(DEBUG, INFO, WARNING, ERROR, Critical)",
+                      default="ERROR")
+    (options, args) = parser.parse_args()
+    if options.log_level:
+        log_level = getattr(logging, options.log_level.upper())
+    logging.basicConfig(level=log_level,
+                        format=LOG_FORMAT)
+
+    loop = asyncio.get_event_loop()
+    import wolverine.web
+    default_settings = os.path.join(wolverine.web.__path__[0],
+                                    'settings.ini')
+    app = MicroApp(loop=loop, config_file=default_settings)
+    web_module = WebGatewayModule()
+    app.register_module(web_module)
+    app.run()
+
+
+if __name__ == '__main__':
+    web()
