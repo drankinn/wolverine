@@ -3,8 +3,8 @@ import logging
 from optparse import OptionParser
 import os
 from wolverine import MicroApp
-from wolverine.gateway import WebGatewayModule
-
+from wolverine.gateway import GatewayModule
+from wolverine.web import WebModule
 
 LOG_FORMAT = "%(asctime)s %(levelname)s" \
              " %(name)s:%(lineno)s %(message)s"
@@ -30,8 +30,10 @@ def web():
     default_settings = os.path.join(wolverine.web.__path__[0],
                                     'settings.ini')
     app = MicroApp(loop=loop, config_file=default_settings)
-    web_module = WebGatewayModule()
-    app.register_module(web_module)
+    gateway = GatewayModule()
+    app.register_module(gateway)
+    web_console = WebModule()
+    app.register_module(web_console)
     app.run()
 
 
