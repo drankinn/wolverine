@@ -27,7 +27,7 @@ class ZMQMicroController(MicroController):
         logger.info('closing module ' + self.name)
 
     def connect_client(self, name, func, **options):
-        port = options.pop('port', '9210')
+        port = options.pop('port', '1800')
         tags = options.pop('tags', ['version:1'])
         version = '1'
         for tag in tags:
@@ -35,7 +35,7 @@ class ZMQMicroController(MicroController):
             if tag_name == 'version' and len(tag.split(':')) > 0:
                 version = tag.split(':')[1]
         async = options.pop('async', False)
-        address = options.pop('address', 'tcp://127.0.0.1')
+        address = options.pop('address', 'tcp://0.0.0.0')
         uri = address + ':' + str(port)
         logger.info('client connect for service: ' + name)
         default_service_id = str(uuid1())[:8] + '_' + version
