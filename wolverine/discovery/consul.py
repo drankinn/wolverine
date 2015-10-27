@@ -243,11 +243,10 @@ class ConsulKVBind(ConsulBind):
                 self.index = index
             except asyncio.CancelledError:
                 logger.warning('Value bind cancelled for ' + self.name)
-                self.state = 0
-                self.index = None
             except Exception:
                 self.state = 0
                 self.index = None
+                self.cache = None
 
 
 class ConsulServiceBind(ConsulBind):
@@ -274,6 +273,7 @@ class ConsulServiceBind(ConsulBind):
         finally:
             self.state = 0
             self.index = None
+            self.cache = None
 
 
 class ConsulServiceHealthBind(ConsulBind):
@@ -305,6 +305,7 @@ class ConsulServiceHealthBind(ConsulBind):
         finally:
             self.state = 0
             self.index = None
+            self.cache = None
 
 
 class ConsulNodeBind(ConsulBind):
@@ -338,6 +339,7 @@ class ConsulNodeBind(ConsulBind):
             self.client.is_connected = False
             self.state = 0
             self.index = None
+            self.cache = None
 
 
 def unwrap_kv(data):

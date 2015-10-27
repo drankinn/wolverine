@@ -6,6 +6,6 @@ COPY . /app
 RUN /env/bin/pip install setuptools --upgrade
 RUN /env/bin/pip install -r /app/requirements.txt
 
-EXPOSE [8080, 1800-1900]
+EXPOSE 8080 1800-1900
 
 CMD ["/env/bin/python", "-m wolverine.web"]
