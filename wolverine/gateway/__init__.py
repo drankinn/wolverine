@@ -1,3 +1,4 @@
+import socket
 import logging
 from uuid import uuid1
 
@@ -25,7 +26,8 @@ class GatewayModule(ZMQMicroController):
 
     def read_config(self):
         config = self.app.config['GATEWAY']
-        self.gw_host = config.get('GATEWAY_HOST')
+        default_host = 'tcp://' + socket.gethostbyname(socket.gethostname())
+        self.gw_host = config.get('GATEWAY_HOST', default_host)
         self.gw_start_port, self.gw_end_port = config.get(
             'GATEWAY_PORT_RANGE').split('-')
         self.gw_start_port = int(self.gw_start_port)
