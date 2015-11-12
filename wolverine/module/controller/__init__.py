@@ -1,6 +1,5 @@
 import inspect
 import logging
-import msgpack
 from wolverine.module import MicroModule
 from wolverine.module.service import ServiceDef
 
@@ -57,8 +56,7 @@ class MicroController(MicroModule):
             options = {'route': name}
             self.add_handler(service_name, 'server', func, **options)
             service_def.routes.append(service_name + '/' + name)
-        packet = msgpack.packb(str(service_def), encoding='utf-8')
-        self.service_defs[service_def.fqn()] = packet
+        self.service_defs[service_def.fqn()] = str(service_def)
         self.services[service_name] = service
 
     def handler(self, service, **options):
