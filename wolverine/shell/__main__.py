@@ -21,6 +21,7 @@ def shell():
                                     'settings.ini')
     config = ConfigParser()
     config.read([default_settings, 'settings.ini'])
+    config.read('settings.ini')
     # Set up a dictionary to serve as the environment for the shell, so
     # that tab completion works on objects that are imported at runtime.
     # See ticket 5082.

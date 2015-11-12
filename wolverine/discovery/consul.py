@@ -32,13 +32,19 @@ class MicroConsul(MicroRegistry):
 
     def run(self):
         self.config = self.app.config['DISCOVERY']
-        self.host = self.config.get('HOST', 'localhost')
-        self.port = int(self.config.get('PORT', '8500'))
-        self.token = self.config.get('TOKEN', None)
-        self.scheme = self.config.get('SCHEME', 'http')
-        self.consistency = self.config.get('CONSISTENCY', 'default')
-        self.dc = self.config.get('DC', None)
-        self.verify = self.config.get('VERIFY', True)
+        self.host = os.getenv("DISCOVERY_HOST",
+                              self.config.get('HOST', 'localhost'))
+        self.port = int(
+            os.getenv("DISCOVERY_PORT", self.config.get('PORT', '8500')))
+        self.token = os.getenv("DISCOVERY_TOKEN",
+                               self.config.get('TOKEN', None))
+        self.scheme = os.getenv("DISCOVERY_SCHEME",
+                                self.config.get('SCHEME', 'http'))
+        self.consistency = os.getenv("DISCOVERY_CONSISTENCY",
+                                     self.config.get('CONSISTENCY', 'default'))
+        self.dc = os.getenv("DISCOVERY_DC", self.config.get('DC', None))
+        self.verify = os.getenv("DISCOVERY_VERIFY",
+                                self.config.get('VERIFY', True))
         self._connect()
         logger.info('Consul - Initializing discovery listeners')
 
@@ -148,7 +154,8 @@ class MicroConsul(MicroRegistry):
                 ttl = None
                 if 'ttl_ping' in options:
                     ttl = options.pop('ttl_ping')
-                yield from self.agent.service.register(name, service_id=service_id,
+                yield from self.agent.service.register(name,
+                                                       service_id=service_id,
                                                        **options)
                 if ttl:
                     self.health_tasks[service_id] = self._loop.create_task(
@@ -243,11 +250,10 @@ class ConsulKVBind(ConsulBind):
                 self.index = index
             except asyncio.CancelledError:
                 logger.warning('Value bind cancelled for ' + self.name)
-                self.state = 0
-                self.index = None
             except Exception:
                 self.state = 0
                 self.index = None
+                self.cache = None
 
 
 class ConsulServiceBind(ConsulBind):
@@ -274,6 +280,7 @@ class ConsulServiceBind(ConsulBind):
         finally:
             self.state = 0
             self.index = None
+            self.cache = None
 
 
 class ConsulServiceHealthBind(ConsulBind):
@@ -287,8 +294,8 @@ class ConsulServiceHealthBind(ConsulBind):
                     self.name,
                     index=self.index,
                     **self.params)
-                logger.debug('\n' + '-'*20 + '\nhealth data:\n' +
-                             str(response) + '\n' + '-'*20)
+                logger.debug('\n' + '-' * 20 + '\nhealth data:\n' +
+                             str(response) + '\n' + '-' * 20)
                 if response is not None:
                     index, data = response
                     if self.cache != data:
@@ -305,6 +312,7 @@ class ConsulServiceHealthBind(ConsulBind):
         finally:
             self.state = 0
             self.index = None
+            self.cache = None
 
 
 class ConsulNodeBind(ConsulBind):
@@ -338,6 +346,7 @@ class ConsulNodeBind(ConsulBind):
             self.client.is_connected = False
             self.state = 0
             self.index = None
+            self.cache = None
 
 
 def unwrap_kv(data):

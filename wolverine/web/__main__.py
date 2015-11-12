@@ -26,10 +26,7 @@ def web():
                         format=LOG_FORMAT)
 
     loop = asyncio.get_event_loop()
-    import wolverine.web
-    default_settings = os.path.join(wolverine.web.__path__[0],
-                                    'settings.ini')
-    app = MicroApp(loop=loop, config_file=default_settings)
+    app = MicroApp(loop=loop)
     gateway = GatewayModule()
     app.register_module(gateway)
     web_console = WebModule()

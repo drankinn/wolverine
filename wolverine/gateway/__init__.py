@@ -1,3 +1,4 @@
+import socket
 import logging
 from uuid import uuid1
 
@@ -25,7 +26,8 @@ class GatewayModule(ZMQMicroController):
 
     def read_config(self):
         config = self.app.config['GATEWAY']
-        self.gw_host = config.get('GATEWAY_HOST')
+        default_host = 'tcp://' + socket.gethostbyname(socket.gethostname())
+        self.gw_host = config.get('GATEWAY_HOST', default_host)
         self.gw_start_port, self.gw_end_port = config.get(
             'GATEWAY_PORT_RANGE').split('-')
         self.gw_start_port = int(self.gw_start_port)
@@ -56,7 +58,7 @@ class GatewayModule(ZMQMicroController):
         def service_data(data):
             service_names = []
             for d in data:
-                service_id = self.gateway_id + '_' + d['version']
+                service_id = self.gateway_id + '_' + str(d['version'])
                 service_name = d['name'] + ':' + service_id
                 service_names.append(service_name)
                 if service_name not in self.app.router.clients.keys():
@@ -78,7 +80,7 @@ class GatewayModule(ZMQMicroController):
             self.app.router.remove_client(name))
 
     def create_client(self, data):
-        service_id = self.gateway_id + '_' + data['version']
+        service_id = self.gateway_id + '_' + str(data['version'])
         service_name = data['name'] + ':' + service_id
         port = self.get_gw_port()
         data['port'] = port
@@ -89,7 +91,7 @@ class GatewayModule(ZMQMicroController):
             'service_id': service_id,
             'address': self.gw_host,
             'port': port,
-            'tags': ['version:' + data['version']],
+            'tags': ['version:' + str(data['version'])],
             'async': True
         }
         route = data['routes'][0]
@@ -97,7 +99,7 @@ class GatewayModule(ZMQMicroController):
             self.connect_client(data['name'],
                                 functools.partial(
                                     self.callback, route, service_name,
-                                    data['version']),
+                                    str(data['version'])),
                                 **options))
         logger.debug('data: ' + str(data))
 
