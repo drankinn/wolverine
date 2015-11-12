@@ -6,12 +6,6 @@ from wolverine.module.controller.zmq import ZMQMicroController
 
 
 def mongo(options):
-    """Run a ping and pong service across a zmq dealer/router device
-
-    :param mode: either client or server
-    :param port: any arbitrary port.  must not be in use if running the client
-    :return:  yo momma
-    """
     from wolverine import MicroApp
     loop = asyncio.get_event_loop()
     config_file = os.path.join(__path__[0], 'settings.ini')
