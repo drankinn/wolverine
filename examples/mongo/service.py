@@ -13,10 +13,10 @@ class MongoService(MicroService):
 
     def read(self, data):
 
-        obj_id = data.get('id', None)
-        db_name = data.get('db', None)
+        obj_id = data.get('id')
+        db_name = data.get('db')
         db = getattr(self.app.mongo, db_name)
-        col_name = data.get('collection', None)
+        col_name = data.get('collection')
         if db:
             collection = getattr(db, col_name)
             if obj_id and collection:
