@@ -15,6 +15,7 @@ class MicroConsul(MicroRegistry):
         super(MicroConsul, self).__init__()
         self.name = 'registry'
         self.binds = {}
+        self.registries = {}
         self.health_tasks = {}
         self.run_tick = 3
         self.is_connected = False
@@ -35,7 +36,7 @@ class MicroConsul(MicroRegistry):
         self.host = os.getenv("DISCOVERY_HOST",
                               self.config.get('HOST', 'localhost'))
         self.port = int(
-            os.getenv("DISCOVERY_PORT", self.config.get('PORT', '8500')))
+                os.getenv("DISCOVERY_PORT", self.config.get('PORT', '8500')))
         self.token = os.getenv("DISCOVERY_TOKEN",
                                self.config.get('TOKEN', None))
         self.scheme = os.getenv("DISCOVERY_SCHEME",
@@ -77,6 +78,7 @@ class MicroConsul(MicroRegistry):
                     self.is_connected = agent_data['Member']['Status']
                     self.is_connected = True
                     self._bind_all()
+                    self._register_all()
                 except Exception:
                     logger.error('failed to connect to agent')
                     self.is_connected = False
@@ -88,6 +90,13 @@ class MicroConsul(MicroRegistry):
                 if bind.state in [0, -1]:
                     logger.info('binding ' + bind.bind_type + ' ' + bind.name)
                     self._loop.create_task(bind.run())
+
+    def _register_all(self):
+        if self.is_connected:
+            for name, registry in self.registries.items():
+                if 'registered' in registry and registry['registered']:
+                    self.register(name, registry['type'], registry['value'],
+                                  registry['options'])
 
     def bind_listener(self, bind_type, name, func, **kwargs):
         bind = None
@@ -143,7 +152,17 @@ class MicroConsul(MicroRegistry):
 
     @asyncio.coroutine
     def register(self, name, register_type='kv', value=None, **options):
+        registry_name = register_type + ":" + name
         try:
+            if registry_name not in self.registries:
+                registry = {
+                    'name': name,
+                    'type': register_type,
+                    'value': value,
+                    'options': options,
+                    'registered': False
+                }
+                self.registries[registry_name] = registry
             if 'kv' == register_type:
                 yield from self.kv.put(name, value, **options)
             if 'service' == register_type:
@@ -159,15 +178,20 @@ class MicroConsul(MicroRegistry):
                                                        **options)
                 if ttl:
                     self.health_tasks[service_id] = self._loop.create_task(
-                        self._health_ttl_ping(service_id, ttl))
+                            self._health_ttl_ping(service_id, ttl))
+            self.registries[registry_name]['registered'] = True
             return True
         except Exception:
             logger.critical('failed to register with consul')
+            self.registries[registry_name]['registered'] = False
             return False
 
     @asyncio.coroutine
     def deregister(self, key, register_type='kv', **options):
         logger.info('deregistering ' + register_type + ' ' + key)
+        registry_name = register_type + ":" + key
+        if registry_name in self.registries:
+            del self.registries[registry_name]
         if 'kv' == register_type:
             yield from self.kv.delete(key)
         if 'service' == register_type:
@@ -209,7 +233,7 @@ class ConsulBind(object):
         self.state = 0
         if 'data' in kwargs:
             self.callbacks.append(
-                self.wrap_callback(callback, kwargs.get('data')))
+                    self.wrap_callback(callback, kwargs.get('data')))
             del kwargs['data']
         else:
             self.callbacks.append(callback)
@@ -265,9 +289,9 @@ class ConsulServiceBind(ConsulBind):
             while self.state == 1:
 
                 index, data = yield from self.client.catalog.service(
-                    self.name,
-                    index=self.index,
-                    **self.params)
+                        self.name,
+                        index=self.index,
+                        **self.params)
                 if self.cache != data:
                     self.cache = data
                     for callback in self.callbacks:
@@ -291,9 +315,9 @@ class ConsulServiceHealthBind(ConsulBind):
         try:
             while self.state == 1:
                 response = yield from self.client.health.service(
-                    self.name,
-                    index=self.index,
-                    **self.params)
+                        self.name,
+                        index=self.index,
+                        **self.params)
                 logger.debug('\n' + '-' * 20 + '\nhealth data:\n' +
                              str(response) + '\n' + '-' * 20)
                 if response is not None:
@@ -329,9 +353,9 @@ class ConsulNodeBind(ConsulBind):
                 if self.name == 'default':
                     self.name = yield from self.load_default_agent_name()
                 index, data = yield from self.client.catalog.node(
-                    self.name,
-                    index=self.index,
-                    **self.params)
+                        self.name,
+                        index=self.index,
+                        **self.params)
                 if self.cache != data:
                     self.cache = data
                     for callback in self.callbacks:
