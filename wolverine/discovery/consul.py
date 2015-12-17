@@ -53,7 +53,7 @@ class MicroConsul(MicroRegistry):
             logger.info("node:" + str(data))
             pass
 
-        self.bind_listener('node', 'node', node_change)
+        self.bind_listener('node', 'default', node_change)
         self.run_task = self._loop.create_task(self.run_forever())
 
     @asyncio.coroutine
