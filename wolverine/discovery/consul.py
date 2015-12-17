@@ -265,12 +265,14 @@ class ConsulKVBind(ConsulBind):
         logger.debug('listening to key: ' + self.name)
         while self.state == 1:
             try:
-                index, data = yield from self.client.kv.get(self.name,
+                index, data = yield from self.client.kv.get(self.name, index=self.index,
                                                             **self.params)
                 if self.cache != data:
                     self.cache = data
                     for callback in self.callbacks:
                         callback((index, data))
+                else:
+                    logger.debug('consul kv wake-up without a change!')
                 self.index = index
             except asyncio.CancelledError:
                 logger.warning('Value bind cancelled for ' + self.name)
