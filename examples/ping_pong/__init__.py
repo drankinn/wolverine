@@ -1,8 +1,11 @@
 import asyncio
 import logging
+import socket
 from uuid import uuid1
 import functools
 import os
+import types
+
 from examples.ping_pong.service import PingPongService
 from wolverine.module.controller.zmq import ZMQMicroController
 
@@ -174,7 +177,7 @@ def ping_client(port, **options):
     module = ZMQMicroController()
     version = options.pop('version', '1')
     ping_opts = {
-        'address': 'tcp://127.0.0.1',
+        'address': 'tcp://' + socket.gethostbyname(socket.gethostname()),
         'port': port,
         'tags': ['version:' + version],
     }
@@ -187,8 +190,6 @@ def ping_client(port, **options):
         done, pending = yield from results
         logger.error('DONE: ' + str(len(done)))
         logger.error('PENDING:' + str(len(pending)))
-        for fail in pending:
-            logger.error('task never finished... ' + fail.result())
         module.app.loop.create_task(module.app.stop('SIGTERM'))
 
     @module.client('ping', async=async, **ping_opts)
@@ -235,7 +236,7 @@ def ping_client(port, **options):
                 send_count += 1
             if async:
                 module.app.loop.create_task(
-                    finish(asyncio.wait(tasks, timeout=10)))
+                    finish(asyncio.wait(tasks, timeout=60)))
             else:
                 module.app.loop.create_task(module.app.stop('SIGTERM'))
         except asyncio.CancelledError:

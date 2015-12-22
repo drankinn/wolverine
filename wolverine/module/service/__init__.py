@@ -50,7 +50,7 @@ class ServiceDef(object):
         self.routes = []
 
     def fqn(self):
-        return 'service:' + self.name + ':' + str(self.version)
+        return 'wolverine:service/' + self.name + '/' + str(self.version)
 
     def __repr__(self):
         return str({

@@ -1,10 +1,9 @@
-FROM needleops/python-consul:3.5
-RUN apk add --update \
-    libzmq
+FROM needleops/python
 
 COPY . /app
-RUN /env/bin/pip install setuptools --upgrade
-RUN /env/bin/pip install -r /app/requirements.txt
+RUN apk add --update libzmq python3-dev build-base \
+    && /env/bin/pip install --no-use-wheel -r /app/requirements.txt \
+    && apk del python3-dev build-base --purge
 
 EXPOSE 8080
 

@@ -8,6 +8,7 @@ from wolverine.module.controller.zmq import ZMQMicroController
 
 logger = logging.getLogger(__name__)
 
+SERVICE_DEF_NAMESPACE = "wolverine:service/"
 
 class GatewayModule(ZMQMicroController):
     def __init__(self):
@@ -54,7 +55,7 @@ class GatewayModule(ZMQMicroController):
         return port
 
     def bind_service_data(self):
-        @self.data('service:', recurse=True)
+        @self.data(SERVICE_DEF_NAMESPACE, recurse=True)
         def service_data(data):
             service_names = []
             for d in data:
