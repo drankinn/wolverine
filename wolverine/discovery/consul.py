@@ -51,7 +51,6 @@ class MicroConsul(MicroRegistry):
 
         def node_change(data):
             logger.info("node:" + str(data))
-            pass
 
         self.bind_listener('node', 'default', node_change)
         self.run_task = self._loop.create_task(self.run_forever())
@@ -95,19 +94,20 @@ class MicroConsul(MicroRegistry):
         if self.is_connected:
             for name, registry in self.registries.items():
                 if 'registered' in registry and registry['registered']:
-                    self.register(name, registry['type'], registry['value'],
-                                  registry['options'])
+                    self.register(name, registry_type=registry['type'],
+                                  value=registry['value'],
+                                  **registry['options'])
 
     def bind_listener(self, bind_type, name, func, **kwargs):
         bind = None
         single = kwargs.pop('singleton', False)
-        if bind_type == 'kv':
+        if bind_type == MicroRegistry.TYPES_KV:
             bind = ConsulKVBind(self, name, func, **kwargs)
-        if bind_type == 'service':
+        if bind_type == MicroRegistry.TYPES_SERVICE:
             bind = ConsulServiceBind(self, name, func, **kwargs)
-        if bind_type == 'health':
+        if bind_type == MicroRegistry.TYPES_HEALTH:
             bind = ConsulServiceHealthBind(self, name, func, **kwargs)
-        if bind_type == 'node':
+        if bind_type == MicroRegistry.TYPES_NODE:
             bind = ConsulNodeBind(self, name, func, **kwargs)
         if isinstance(bind, ConsulBind):
             if bind.key in self.binds.keys():
@@ -151,7 +151,8 @@ class MicroConsul(MicroRegistry):
             return unwrap_health(data)
 
     @asyncio.coroutine
-    def register(self, name, register_type='kv', value=None, **options):
+    def register(self, name, register_type=MicroRegistry.TYPES_KV,
+                 value=None, **options):
         registry_name = register_type + ":" + name
         try:
             if registry_name not in self.registries:
@@ -163,9 +164,9 @@ class MicroConsul(MicroRegistry):
                     'registered': False
                 }
                 self.registries[registry_name] = registry
-            if 'kv' == register_type:
+            if register_type == MicroRegistry.TYPES_KV:
                 yield from self.kv.put(name, value, **options)
-            if 'service' == register_type:
+            if register_type == MicroRegistry.TYPES_SERVICE:
                 service_id = options.pop('service_id', name)
                 check_ttl = options.pop('check_ttl', None)
                 if check_ttl:
@@ -265,7 +266,8 @@ class ConsulKVBind(ConsulBind):
         logger.debug('listening to key: ' + self.name)
         while self.state == 1:
             try:
-                index, data = yield from self.client.kv.get(self.name, index=self.index,
+                index, data = yield from self.client.kv.get(self.name,
+                                                            index=self.index,
                                                             **self.params)
                 if self.cache != data:
                     self.cache = data

@@ -7,6 +7,11 @@ from wolverine.module import MicroModule
 
 class MicroRegistry(MicroModule):
 
+    TYPES_NODE = 'node'
+    TYPES_KV = 'kv'
+    TYPES_SERVICE = 'service'
+    TYPES_HEALTH = 'health'
+
     def __init__(self):
         super(MicroRegistry, self).__init__()
         self.name = 'registry'

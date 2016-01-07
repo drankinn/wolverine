@@ -7,6 +7,8 @@ import aiozmq
 import msgpack
 import types
 import zmq
+
+from wolverine import MicroRegistry
 from . import MicroController
 from .zhelpers import event_description, unpack
 
@@ -109,7 +111,7 @@ class ZMQMicroController(MicroController):
 
     @asyncio.coroutine
     def connect_data(self, name, func, **options):
-        listen_type = options.pop('listen_type', 'kv')
+        listen_type = options.pop('listen_type', MicroRegistry.TYPES_KV)
 
         @self.app.registry.listen(name, listen_type=listen_type,
                                   **options)
@@ -141,7 +143,7 @@ class ZMQMicroController(MicroController):
         except Exception:
             options['tag'] = 'version:1'
         bind_type = options.pop('bind_type', zmq.ROUTER)
-        listen_type = options.pop('listen_type', 'health')
+        listen_type = options.pop('listen_type', MicroRegistry.TYPES_HEALTH)
 
         @self.app.registry.listen(name, listen_type=listen_type,
                                   singleton=True, **options)
