@@ -1,5 +1,8 @@
 import inspect
 import logging
+
+import asyncio
+
 from wolverine.module import MicroModule
 from wolverine.module.service import ServiceDef
 
@@ -91,11 +94,14 @@ class MicroController(MicroModule):
     def add_handler(self, name, handler_type, f, **options):
         self.handlers.append((name, handler_type, f, options))
 
+    @asyncio.coroutine
     def connect_service(self, name, service):
         logger.debug('connecting handler service ' + name)
 
+    @asyncio.coroutine
     def connect_client(self, name, func, **options):
         logger.debug('connecting handler client ' + name)
 
+    @asyncio.coroutine
     def connect_data(self, name, func, **options):
         logger.debug('connecting handler data' + name)
