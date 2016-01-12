@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+CODE_DIR="$(dirname $0)"
+while [[ $# > 0 ]]
+do
+key="$1"
+case $key in
+    -i|--image)
+    DOCKER_IMAGE="$2"
+    shift
+    ;;
+    -d|--dir)
+    CODE_DIR="$2"
+    shift
+    ;;
+    -p|--package)
+    PACKAGE="$2"
+    shift
+    ;;
+    *)
+    ;;
+esac
+shift
+done
+
+VERSION=$(docker run --rm -v $CODE_DIR:/app --workdir /app $DOCKER_IMAGE /scripts/version | grep -E '^[0-9]+.[0-9]+.[0-9]+')
+echo "running tests for version $VERSION"
+echo "covering package $PACKAGE"
+docker run --rm -v $CODE_DIR:/app $DOCKER_IMAGE /scripts/py.test -c $PACKAGE

@@ -1,4 +1,4 @@
-FROM needleops/python
+FROM needleops/python:3.5
 
 COPY . /app
 RUN apk add --update libzmq python3-dev build-base libxml2 libxml2-dev libxslt libxslt-dev \
