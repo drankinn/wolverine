@@ -26,4 +26,4 @@ done
 VERSION=$(docker run --rm -v $CODE_DIR:/app --workdir /app $DOCKER_IMAGE /scripts/version | grep -E '^[0-9]+.[0-9]+.[0-9]+')
 echo "running tests for version $VERSION"
 echo "covering package $PACKAGE"
-docker run --rm -v $CODE_DIR:/app $DOCKER_IMAGE /scripts/py.test -c $PACKAGE
+docker run --rm -v $CODE_DIR:/app $DOCKER_IMAGE:$VERSION /scripts/py.test -c $PACKAGE

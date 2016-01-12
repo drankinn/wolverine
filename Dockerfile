@@ -1,9 +1,7 @@
 FROM needleops/python:3.5
 
 COPY . /app
-RUN apk add --update libzmq python3-dev build-base libxml2 libxml2-dev libxslt libxslt-dev \
-    && /env/bin/pip install --no-use-wheel -r /app/requirements.txt \
-    && apk del python3-dev build-base libxml2-dev libxslt-dev --purge
+RUN /env/bin/pip install --no-use-wheel -r /app/requirements.txt
 
 EXPOSE 8080
 
