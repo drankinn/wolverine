@@ -40,6 +40,5 @@ def main():
     ping_pong(args[0], options)
 
 
-
 if __name__ == "__main__":
     main()

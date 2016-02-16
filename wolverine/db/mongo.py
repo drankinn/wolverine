@@ -1,5 +1,8 @@
 import logging
-from asyncio_mongo import Pool
+try:
+    from asyncio_mongo import Pool
+except Exception as ex:
+    pass
 import os
 from wolverine.db import MicroDB
 

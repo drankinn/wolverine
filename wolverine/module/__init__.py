@@ -8,6 +8,7 @@ class MicroModule(object):
 
     def __init__(self):
         self.name = self.__class__.__name__
+        super().__init__()
 
     def register_app(self, app):
         self.app = app

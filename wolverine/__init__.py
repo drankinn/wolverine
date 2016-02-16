@@ -87,12 +87,6 @@ class MicroApp(object):
             self.loop.add_signal_handler(getattr(signal, sig),
                                          functools.partial(self._exit,
                                                            sig))
-        try:
-            self.loop.run_forever()
-            logger.info('closing loop')
-            self.loop.close()
-        except Exception:
-            logger.error('boom', exc_info=True)
 
     def _exit(self, sig_name):
         self.loop.create_task(self.stop(sig_name))
