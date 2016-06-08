@@ -26,12 +26,16 @@ class MicroConsul(MicroRegistry):
         self.default_settings = os.path.join(wolverine.discovery.__path__[0],
                                              'consul.ini')
 
-    def register_app(self, app):
-        self.app = app
+    @property
+    def app(self):
+        return self._app
+    @app.setter
+    def app(self, app):
+        self._app = app
         app.config.read(self.default_settings)
         self._loop = app.loop
 
-    def run(self):
+    def init(self):
         self.config = self.app.config['DISCOVERY']
         self.host = os.getenv("DISCOVERY_HOST",
                               self.config.get('HOST', 'localhost'))
@@ -56,7 +60,7 @@ class MicroConsul(MicroRegistry):
         self.run_task = self._loop.create_task(self.run_forever())
 
     @asyncio.coroutine
-    def stop(self):
+    def app_stop(self):
         self.alive = False
 
     def _connect(self):
@@ -88,15 +92,14 @@ class MicroConsul(MicroRegistry):
             for key, bind in self.binds.items():
                 if bind.state in [0, -1]:
                     logger.info('binding ' + bind.bind_type + ' ' + bind.name)
-                    self._loop.create_task(bind.run())
+                    self._loop.create_task(bind.init())
 
     def _register_all(self):
         if self.is_connected:
             for name, registry in self.registries.items():
                 if 'registered' in registry and registry['registered']:
                     self.register(name, registry_type=registry['type'],
-                                  value=registry['value'],
-                                  **registry['options'])
+                                  value=registry['value'])
 
     def bind_listener(self, bind_type, name, func, **kwargs):
         bind = None
@@ -175,8 +178,7 @@ class MicroConsul(MicroRegistry):
                 if 'ttl_ping' in options:
                     ttl = options.pop('ttl_ping')
                 yield from self.agent.service.register(name,
-                                                       service_id=service_id,
-                                                       **options)
+                                                       service_id=service_id)
                 if ttl:
                     self.health_tasks[service_id] = self._loop.create_task(
                             self._health_ttl_ping(service_id, ttl))

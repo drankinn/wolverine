@@ -17,7 +17,7 @@ class WebModule(MicroModule, Application):
         self.default_settings = os.path.join(__path__[0],
                                              'settings.ini')
 
-    def register_app(self, app):
+    def register(self, app):
         self.app = app
         app.config.read(self.default_settings)
 
@@ -27,7 +27,7 @@ class WebModule(MicroModule, Application):
         self.http_port = config.get('HTTP_PORT')
         self.static_folder = config.get('STATIC', '/tmp/')
 
-    def run(self):
+    def init(self):
         logger.info('running the web console')
         self.read_config()
         self.router.add_static('/static', self.static_folder)

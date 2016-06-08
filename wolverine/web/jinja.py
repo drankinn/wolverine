@@ -19,7 +19,7 @@ class JinjaModule(MicroModule):
         self.name = 'jinja'
         self.template_folder = '/tmp/templates'
 
-    def run(self):
+    def init(self):
         self.read_config()
         setup(self.app.web,
               loader=jinja2.FileSystemLoader(self.template_folder))

@@ -23,7 +23,7 @@ class MicroRouter(MicroModule):
         self.servers = {}
         self.async_req_queue = {}
 
-    def run(self):
+    def init(self):
         pass
         # self.sort_handlers()
 
@@ -35,7 +35,7 @@ class MicroRouter(MicroModule):
         self.service_handlers = sorted_handlers
 
     @asyncio.coroutine
-    def stop(self):
+    def app_stop(self):
         for service_name in list(self.servers.keys()):
             self.remove_server(service_name)
         for key in list(self.clients.keys()):
@@ -49,8 +49,7 @@ class MicroRouter(MicroModule):
         if service_id not in self.clients.keys():
             self.clients[service_id] = client
             up = yield from self.app.registry.register(name,
-                                                       register_type='service',
-                                                       **options)
+                                                       register_type='service')
             return up
         else:
             logger.warning('not overriding a client with route ' + name)

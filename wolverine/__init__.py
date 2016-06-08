@@ -1,33 +1,28 @@
 import asyncio
-from configparser import ConfigParser
 import logging
 import importlib
-import os
 import signal
-import functools
-import types
 
+from wolverine.module import MicroModule
 from .discovery import MicroRegistry
 
 logger = logging.getLogger(__name__)
 
 
-class MicroApp(object):
-    SIG_NAMES = ('SIGINT', 'SIGTERM', 'SIGHUP')
-
-    _default_registry = MicroRegistry
+class MicroApp(MicroModule):
 
     def __init__(self, loop=None, config_file='settings.ini'):
+        super().__init__()
         self.name = ''
         self.config_file = config_file
-        default_settings = os.path.join(__path__[0],
-                                        'settings.ini')
-        self.config = ConfigParser()
-        self.config.read(default_settings)
-
         self.tasks = []
         self.modules = {}
         self._loop = loop
+        self.running = False
+
+    def __call__(self):
+        """gunicorn compatibility"""
+        return self
 
     @property
     def loop(self):
@@ -37,7 +32,7 @@ class MicroApp(object):
 
     def register_module(self, module):
         logger.info("registering module [" + module.name + "]")
-        module.register_app(self)
+        module.add_config_dependency(self)
         self.modules[module.name] = module
 
     def _get_module_class(self, app_var):
@@ -46,62 +41,58 @@ class MicroApp(object):
         _module = importlib.import_module(module_name)
         return getattr(_module, class_name)()
 
-    def _load_registry(self):
-        registry = self._get_module_class('REGISTRY')
-        self.register_module(registry)
-
-    def _load_router(self):
-        router = self._get_module_class('ROUTER')
-        self.register_module(router)
-
-    def run(self):
+    async def run(self):
         """
         Registers the internal modules.
         Loads the user defined configuration (if any)
         then gives each module a chance to execute their run method
         lastly calls the _run method to start the loop.
         """
+        if self.running:
+            return
+        self.configure()
+        self.running = True
         self.config.read(self.config_file)
-        self._load_registry()
-        self._load_router()
         self.config.read(self.config_file)
 
-        @asyncio.coroutine
-        def _module_run():
-            for key, module in self.modules.items():
-                ret = module.run()
-                if isinstance(ret, types.GeneratorType):
-                    yield from ret
-        self.loop.run_until_complete(_module_run())
+        for key, module in self.modules.items():
+            module.init()
+
         print('')
         self.name = self.config['APP'].get('NAME', 'Spooky Ash')
         print('-' * 20)
         print('   --', self.name, '--')
         print('-' * 20)
         print('')
-        self._run()
+        self.init_signals()
 
-    def _run(self):
-        """ attach the exit signal handler and start the loop"""
-        for sig in self.SIG_NAMES:
-            self.loop.add_signal_handler(getattr(signal, sig),
-                                         functools.partial(self._exit,
-                                                           sig))
+    def init_signals(self):
+        self.loop.add_signal_handler(signal.SIGQUIT, self.handle_exit)
+        self.loop.add_signal_handler(signal.SIGTERM, self.handle_exit)
+        self.loop.add_signal_handler(signal.SIGINT, self.handle_exit)
+        self.loop.add_signal_handler(signal.SIGABRT, self.handle_exit)
 
-    def _exit(self, sig_name):
-        self.loop.create_task(self.stop(sig_name))
+    def handle_exit(self):
+        asyncio.ensure_future(self.shutdown())
+        print(1)
 
-    def stop(self, sig_name):
-        if sig_name in self.SIG_NAMES:
-            for key, module in self.modules.items():
-                yield from module.stop()
-            tasks = asyncio.Task.all_tasks(self.loop)
-            for task in tasks:
-                try:
-                    task.cancel()
-                except Exception:
-                    logger.error('failed to cancel task', exc_info=True)
-            self.loop.stop()
+    async def shutdown(self):
+        print(2)
+        await self.stop()
+        tasks = asyncio.Task.all_tasks(self.loop)
+        for task in tasks:
+            try:
+                task.cancel()
+            except Exception:
+                pass
+        self.loop.stop()
+        print(4)
+
+    async def stop(self):
+        print(3)
+        for key, module in self.modules.items():
+            await module.app_stop()
+        self.running = False
 
     def __getattr__(self, item):
         if item in self.modules.keys():

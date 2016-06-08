@@ -17,7 +17,7 @@ class GatewayWebModule(MicroModule):
         self.app = None
         self.tasks = []
 
-    def run(self):
+    def init(self):
         logger.info('Gateway web router run')
         self.app.web.add_route('GET', '/', self.hello)
         self.app.web.add_route('GET', '/service', self.get_services)

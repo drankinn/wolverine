@@ -33,6 +33,19 @@ def web():
     app.register_module(web_console)
     app.run()
 
+    def shutdown(sig_name):
+        if sig_name in MicroApp.SIG_NAMES:
+            app.web.stop_server()
+            tasks = asyncio.Task.all_tasks(loop)
+            for task in tasks:
+                try:
+                    task.cancel()
+                except Exception:
+                    pass
+            loop.stop()
+    app.add_shutdown_handler(shutdown)
+    app.web.create_server()
+    loop.run_forever()
 
 if __name__ == '__main__':
     web()

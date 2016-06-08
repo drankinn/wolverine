@@ -8,6 +8,6 @@ def test_micro_module(event_loop):
     module.name = 'mod'
     module.register_app(app)
     assert module.app == app
-    module.run()
-    event_loop.run_until_complete(module.stop())
+    module.app_run()
+    event_loop.run_until_complete(module.app_stop())
     assert module.name == 'mod'

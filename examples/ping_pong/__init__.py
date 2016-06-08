@@ -190,7 +190,7 @@ def ping_client(port, **options):
         done, pending = yield from results
         logger.error('DONE: ' + str(len(done)))
         logger.error('PENDING:' + str(len(pending)))
-        module.app.loop.create_task(module.app.stop('SIGTERM'))
+        module.app.loop.create_task(module.app.app_stop('SIGTERM'))
 
     @module.client('ping', async=async, **ping_opts)
     def ping():
@@ -238,7 +238,7 @@ def ping_client(port, **options):
                 module.app.loop.create_task(
                     finish(asyncio.wait(tasks, timeout=60)))
             else:
-                module.app.loop.create_task(module.app.stop('SIGTERM'))
+                module.app.loop.create_task(module.app.app_stop('SIGTERM'))
         except asyncio.CancelledError:
             logger.debug('ping client killed')
 

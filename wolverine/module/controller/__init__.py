@@ -18,7 +18,7 @@ class MicroController(MicroModule):
         self.clients = {}
         self.name = self.__class__.__name__
 
-    def run(self):
+    def init(self):
         logger.info('running module ' + self.name)
 
         for name, service in self.services.items():

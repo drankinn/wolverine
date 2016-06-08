@@ -21,7 +21,7 @@ class GatewayModule(ZMQMicroController):
         self.used_ports = []
         self.recycled_ports = []
 
-    def register_app(self, app):
+    def register(self, app):
         self.app = app
         app.config.read(self.default_settings)
 
@@ -34,11 +34,11 @@ class GatewayModule(ZMQMicroController):
         self.gw_start_port = int(self.gw_start_port)
         self.gw_end_port = int(self.gw_end_port)
 
-    def run(self):
+    def init(self):
         logger.info('running the gateway')
         self.read_config()
         self.bind_service_data()
-        super(GatewayModule, self).run()
+        super(GatewayModule, self).init()
 
     def get_gw_port(self):
         port = self.gw_start_port

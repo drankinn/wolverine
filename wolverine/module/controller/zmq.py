@@ -25,7 +25,7 @@ class ZMQMicroController(MicroController):
         super(ZMQMicroController, self).__init__()
 
     @asyncio.coroutine
-    def stop(self):
+    def app_stop(self):
         logger.info('closing module ' + self.name)
 
     def connect_client(self, name, func, **options):
