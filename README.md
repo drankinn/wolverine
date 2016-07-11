@@ -1,7 +1,7 @@
+[![Build Status](https://travis-ci.org/drankinn/wolverine.svg?branch=master)](https://travis-ci.org/drankinn/wolverine)
+
 # Wolverine
 A Micro-Service framework built on python 3.5 and asyncio
-
-[![Build Status](https://travis-ci.org/drankinn/wolverine.svg?branch=master)](https://travis-ci.org/drankinn/wolverine)
 
 requirements for using as a package:
 python >= version 3.5
