@@ -1,0 +1,7 @@
+version: '2'
+services:
+  wolverine:
+    image: needleops/wolverine
+    command: '/env/bin/python -m examples.ping_pong pong -d0 -a -lDEBUG'
+    volumes:
+      - ./:/app

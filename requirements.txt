@@ -1,7 +1,7 @@
 aiohttp==0.19.0
 aiozmq==0.7.1
 asyncio_mongo==0.2.4
-lxml==3.5.0
+lxml==3.6.0
 msgpack-python==0.4.6
 pep8==1.6.2
 pytest==2.8.5

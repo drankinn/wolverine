@@ -44,7 +44,8 @@ def ping_pong(mode, options):
                         routing=options.routing))
     if 'gateway' == mode:
         app.register_module(gateway())
-    app.run()
+    loop.create_task(app.run())
+    loop.run_forever()
 
 
 def gateway():
